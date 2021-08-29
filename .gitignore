@@ -1,0 +1,6 @@
+appinfo/
+depots/
+venv/
+virtualenv/
+*.swp
+depot_keys.txt
