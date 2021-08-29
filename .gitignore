@@ -2,5 +2,6 @@ appinfo/
 depots/
 venv/
 virtualenv/
+extract/
 *.swp
 depot_keys.txt
