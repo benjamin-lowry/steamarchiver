@@ -2,13 +2,14 @@
 from argparse import ArgumentParser
 from binascii import hexlify
 from datetime import datetime
+from hashlib import sha1
+from io import BytesIO
 from os import makedirs, remove
 from os.path import dirname
 from pathlib import Path
 from struct import unpack
 from sys import argv
 from zipfile import ZipFile
-from io import BytesIO
 import lzma
 
 if __name__ == "__main__": # exit before we import our shit if the args are wrong
@@ -76,6 +77,9 @@ if __name__ == "__main__":
                     else:
                         print("ERROR: unknown archive type", decrypted[:2].decode())
                         exit(1)
+                    sha = sha1(decompressed)
+                    if sha.digest() != chunk.sha:
+                        print("ERROR: sha1 checksum mismatch (expected %s, got %s)" % (hexlify(chunk.sha).decode(), sha.hexdigest()))
                 if not args.dry_run:
                     with open("./extract/" + file.filename, "wb") as f:
                         f.seek(chunk.offset)
