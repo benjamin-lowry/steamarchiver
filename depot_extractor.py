@@ -62,10 +62,13 @@ if __name__ == "__main__":
                         if decrypted[:2] == b'VZ': # LZMA
                             print("Extracting", file.filename, "(LZMA) from chunk", chunkhex)
                             decompressed = lzma.LZMADecompressor(lzma.FORMAT_RAW, filters=[lzma._decode_filter_properties(lzma.FILTER_LZMA1, decrypted[7:12])]).decompress(decrypted[12:-9])[:chunk.cb_original]
-                        else:
+                        elif decrypted[:2] == b'PK': # Zip
                             print("Extracting", file.filename, "(Zip) from chunk", chunkhex)
                             zipfile = ZipFile(BytesIO(decrypted))
                             decompressed = zipfile.read(zipfile.filelist[0])
+                        else:
+                            print("ERROR: unknown archive type", decrypted[:2].decode())
+                            exit(1)
                     f.seek(chunk.offset)
                     f.write(decompressed)
         except IsADirectoryError:
