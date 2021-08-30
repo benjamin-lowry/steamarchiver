@@ -3,12 +3,30 @@ from binascii import hexlify
 from steam.client import SteamClient
 from steam.core.msg import MsgProto
 from steam.enums.emsg import EMsg
+from sys import argv
 from vdf import loads
 
 if __name__ == "__main__":
     steam_client = SteamClient()
+    print("Connecting to the Steam network...")
     steam_client.connect()
-    steam_client.cli_login()
+    print("Logging in...")
+    if len(argv) == 1:
+        steam_client.cli_login()
+    elif len(argv) == 2:
+        if argv[1] == "anonymous":
+            steam_client.anonymous_login()
+            print("Logged in anonymously")
+        else:
+            steam_client.cli_login(username=argv[1])
+    elif len(argv) == 3:
+        steam_client.cli_login(username=argv[1], password=argv[2])
+        print("Logged in as", argv[1])
+    elif len(argv) == 4:
+        steam_client.login(username=argv[1], password=argv[2], two_factor_code=argv[3], auth_code=argv[3])
+    else:
+        print("usage:", argv[0], "[username password steam_guard_code]")
+        exit(1)
     licensed_packages = []
     licensed_apps = []
     licensed_depots = []
