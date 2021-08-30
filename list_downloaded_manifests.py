@@ -128,9 +128,14 @@ def print_depot_info(depotid, manifests=None, print_not_exists=True, name=None):
             return False
     else:
         try:
+            results = []
             for file in listdir(path):
                 if file.endswith(".zip"):
-                    return print_manifest_info(depotid, int(file.replace(".zip", "")), print_not_exists, name)
+                    results.append(print_manifest_info(depotid, int(file.replace(".zip", "")), print_not_exists, name))
+            if all(x for x in results):
+                return True
+            else:
+                return False
         except FileNotFoundError:
             if name:
                 print("\t\tDepot %s (%s) not found" % (depotid, name))
