@@ -27,6 +27,9 @@ There are three scripts currently.
   from decrypting preloaded game content. Keys will be saved to depot_keys.txt
 - ``depot_extractor.py`` extracts downloaded depots. It requires the key but can
   work completely offline.
+- ``list_downloaded_manifests.py`` can be used to verify if a particular
+  depot/manifest has been downloaded, or it can list out the manifests used by
+  branches of an app and check if they've been downloaded.
 
 For help finding appids, depotids, and manifests, check out
 https://steamdb.info
