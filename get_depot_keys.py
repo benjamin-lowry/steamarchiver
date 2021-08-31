@@ -3,6 +3,7 @@ from binascii import hexlify
 from steam.client import SteamClient
 from steam.core.msg import MsgProto
 from steam.enums.emsg import EMsg
+from os.path import exists
 from sys import argv
 from vdf import loads
 
@@ -56,13 +57,15 @@ if __name__ == "__main__":
             appinfo_response.append(app)
     app_dict = {}
     for app in appinfo_response:
-        with open("./appinfo/" + str(app.appid) + "_" + str(app.change_number) + ".vdf", "wb") as f:
-            f.write(app.buffer[:-1])
+        appinfo_path = "./appinfo/%s_%s.vdf" % (app.appid, app.change_number)
         app_dict[app.appid] = loads(app.buffer[:-1].decode('utf-8', 'replace'))['appinfo']
-        try:
-            print("Saved appinfo for app", app.appid, "changenumber", app.change_number, app_dict[app.appid]['common']['name'])
-        except KeyError:
-            print("Saved appinfo for app", app.appid, "changenumber", app.change_number)
+        if not exists(appinfo_path):
+            with open(appinfo_path, "wb") as f:
+                f.write(app.buffer[:-1])
+            try:
+                print("Saved appinfo for app", app.appid, "changenumber", app.change_number, app_dict[app.appid]['common']['name'])
+            except KeyError:
+                print("Saved appinfo for app", app.appid, "changenumber", app.change_number)
 
     keys_saved = []
     with open("./depot_keys.txt", "w+") as f:

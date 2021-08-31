@@ -68,9 +68,11 @@ if __name__ == "__main__":
     appinfo_response = steam_client.wait_event(steam_client.send_job(msg))[0].body.apps[0]
     changenumber = appinfo_response.change_number
     # Write vdf appinfo to disk
-    with open("./appinfo/" + str(appid) + "_" + str(changenumber) + ".vdf", "wb") as f:
-        f.write(appinfo_response.buffer[:-1])
-        print("Saved appinfo for app", appid, "changenumber", changenumber)
+    appinfo_path = "./appinfo/%s_%s.vdf" % (appid, change_number)
+    if not path.exists(appinfo_path):
+        with open(appinfo_path, "wb") as f:
+            f.write(appinfo_response.buffer[:-1])
+            print("Saved appinfo for app", appid, "changenumber", changenumber)
 
     # decode appinfo
     appinfo = loads(appinfo_response.buffer[:-1].decode('utf-8', 'replace'))['appinfo']
