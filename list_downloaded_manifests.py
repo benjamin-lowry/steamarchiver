@@ -40,7 +40,11 @@ def print_app_info(appid, duplicate_appinfo=False):
                 print("App %s change #%s: %s" % (appid, change, appinfo['appinfo']['common']['name']))
             print_branches(appinfo)
     else:
-        highest_changenumber = next(reversed(sorted(changenumbers)))
+        try:
+            highest_changenumber = next(reversed(sorted(changenumbers)))
+        except StopIteration:
+            print("No local appinfo for app", appid)
+            return
         with open("./appinfo/%s_%s.vdf" % (appid, highest_changenumber), "r") as f:
             appinfo = loads(f.read())
         if 'common' not in appinfo['appinfo'].keys():
