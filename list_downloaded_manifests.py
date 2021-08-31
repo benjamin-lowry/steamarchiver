@@ -99,14 +99,17 @@ def print_branches(appinfo):
             print("\tBranch %s: build %s, last update unknown" % (branch_name, branch_info['buildid']))
         else:
             print("\tBranch %s: build %s, last update %s" % (branch_name, branch_info['buildid'], datetime.fromtimestamp(int(branch_info['timeupdated']))))
-        for depot in depots:
-            try:
-                if print_depot_info(depot, name=depot_names[depot], manifests=[depot_branch_manifests[depot][branch_name]], print_not_exists=True):
-                    depots_downloaded[branch_name] += 1
-            except KeyError:
-                if print_depot_info(depot, name=depot_names[depot], print_not_exists=True):
-                    depots_downloaded[branch_name] += 1
-        print("\t\tDepots available: %s/%s" % (depots_downloaded[branch_name], len(depots)))
+        if "pwdrequired" in branch_info.keys() and branch_info["pwdrequired"] == "1":
+            print("\t\t[No manifest information, this branch requires a password.]")
+        else:
+            for depot in depots:
+                try:
+                    if print_depot_info(depot, name=depot_names[depot], manifests=[depot_branch_manifests[depot][branch_name]], print_not_exists=True):
+                        depots_downloaded[branch_name] += 1
+                except KeyError:
+                    if print_depot_info(depot, name=depot_names[depot], print_not_exists=True):
+                        depots_downloaded[branch_name] += 1
+            print("\t\tDepots available: %s/%s" % (depots_downloaded[branch_name], len(depots)))
     if 'public' in appinfo['appinfo']['depots']['branches'].keys():
         print("\t%s/%s depots for %s are up-to-date with the public branch" % (depots_downloaded["public"], len(depots), appinfo['appinfo']['common']['name']))
 
