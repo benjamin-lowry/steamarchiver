@@ -92,7 +92,8 @@ if __name__ == "__main__":
                     continue
                 if depot in licensed_depots:
                     key = steam_client.get_depot_key(app, depot).depot_encryption_key
-                    key_hex = hexlify(key).decode()
                     keys_saved.append(depot)
-                    f.write("%s\t\t%s\t%s" % (depot, key_hex, info['name']) + "\n")
-                    print("%s\t\t%s\t%s" % (depot, key_hex, info['name']))
+                    if key != b'':
+                        key_hex = hexlify(key).decode()
+                        f.write("%s\t\t%s\t%s" % (depot, key_hex, info['name']) + "\n")
+                        print("%s\t\t%s\t%s" % (depot, key_hex, info['name']))
