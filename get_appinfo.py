@@ -50,8 +50,8 @@ if __name__ == "__main__":
                 break
             except TypeError:
                 print("Timeout reached, retrying...")
-        print("Received response from Steam PICS containing info for %s apps." %
-                len(response.apps))
+        print("Received response from Steam PICS containing info for %s %s." %
+            (len(response.apps), "app" if len(response.apps) == 1 else "apps"))
         for appinfo_response in response.apps:
             # Write vdf appinfo to disk
             appinfo_path = "./appinfo/%s_%s.vdf" % (appinfo_response.appid,
