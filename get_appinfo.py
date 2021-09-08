@@ -27,14 +27,14 @@ if __name__ == "__main__":
         print("Fetching list of apps from WebAPI...")
         for app in WebAPI(None).ISteamApps.GetAppList_v2()['applist']['apps']:
             appids.append(app['appid'])
+        # Write the current changenumber, for use later with update_appinfo
+        with open("./last_change.txt", "w") as f:
+            msg = MsgProto(EMsg.ClientPICSChangesSinceRequest)
+            msg.body.since_change_number = 0
+            response = steam_client.wait_event(steam_client.send_job(msg))[0].body
+            print("Latest change:", response.current_change_number)
+            f.write(str(response.current_change_number))
 
-    # Write the current changenumber, for use later with update_appinfo
-    with open("./last_change.txt", "w") as f:
-        msg = MsgProto(EMsg.ClientPICSChangesSinceRequest)
-        msg.body.since_change_number = 0
-        response = steam_client.wait_event(steam_client.send_job(msg))[0].body
-        print("Latest change:", response.current_change_number)
-        f.write(str(response.current_change_number))
 
     # Fetch appinfo in groups of 30 (the maximum number of apps PICS will give
     # us in one message)
