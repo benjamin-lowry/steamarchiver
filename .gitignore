@@ -5,3 +5,4 @@ virtualenv/
 extract/
 *.swp
 depot_keys.txt
+last_change.txt

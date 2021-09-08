@@ -9,7 +9,7 @@ First install the requirements:
 
 ``pip3 install -r requirements.txt``
 
-There are three scripts currently.
+Usage for the scripts:
 
 - ``depot_archiver.py`` downloads depots (the logical groupings of game content
   files Steam delivers). You can give it an appid, in which case it'll download
@@ -30,6 +30,10 @@ There are three scripts currently.
 - ``list_downloaded_manifests.py`` can be used to verify if a particular
   depot/manifest has been downloaded, or it can list out the manifests used by
   branches of an app and check if they've been downloaded.
+- ``get_appinfo.py`` downloads the latest appinfo for the specified apps, or for
+  all publicly visible apps if run with no arguments.
+- ``update_appinfo.py`` attempts to download appinfo for only the apps that have
+  changes since the last time get_appinfo was run.
 
 For help finding appids, depotids, and manifests, check out
 https://steamdb.info
