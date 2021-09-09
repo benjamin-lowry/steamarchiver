@@ -103,11 +103,19 @@ def print_branches(appinfo):
             print("\t\t[No manifest information, this branch requires a password.]")
         else:
             for depot in depots:
-                try:
-                    if print_depot_info(depot, name=depot_names[depot], manifests=[depot_branch_manifests[depot][branch_name]], print_not_exists=True):
+                if branch_name in depot_branch_manifests[depot].keys():
+                    if print_depot_info(depot, name=depot_names[depot],
+                            manifests=[depot_branch_manifests[depot][branch_name]],
+                            print_not_exists=True):
                         depots_downloaded[branch_name] += 1
-                except KeyError:
-                    if print_depot_info(depot, name=depot_names[depot], print_not_exists=True):
+                elif "public" in depot_branch_manifests[depot].keys():
+                    if print_depot_info(depot, name=depot_names[depot],
+                            manifests=[depot_branch_manifests[depot]["public"]],
+                            print_not_exists=True):
+                        depots_downloaded[branch_name] += 1
+                else:
+                    if print_depot_info(depot, name=depot_names[depot],
+                            print_not_exists=True):
                         depots_downloaded[branch_name] += 1
             print("\t\tDepots available: %s/%s" % (depots_downloaded[branch_name], len(depots)))
     if 'public' in appinfo['appinfo']['depots']['branches'].keys():
