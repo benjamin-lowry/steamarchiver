@@ -1,7 +1,8 @@
 # steamarchiver
 
-A set of Python scripts to download Steam depots in SteamPipe CDN format and
-extract their content, for future preservation.
+A set of Python scripts to preserve Steam content, including tools to archive
+app information, archive depots in SteamPipe CDN content and extract them, and
+download versions of the Steam client.
 
 ## Usage
 
@@ -34,6 +35,12 @@ Usage for the scripts:
   all publicly visible apps if run with no arguments.
 - ``update_appinfo.py`` attempts to download appinfo for only the apps that have
   changes since the last time get_appinfo was run.
+- ``get_client.py`` downloads the manifest for the Steam client and downloads
+  all needed packages. When run without arguments it'll download the release
+  version of the Steam client for Win32; you can also specify a different
+  channel, e.g. ``get_client.py steam_client_ubuntu12``, ``get_client.py
+  steam_client_publicbeta_osx``, ``get_client.py steam_cmd_linux``,
+  ``get_client.py steamchina_win32``, etc.
 
 For help finding appids, depotids, and manifests, check out
 https://steamdb.info
