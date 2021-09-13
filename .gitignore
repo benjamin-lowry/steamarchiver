@@ -3,6 +3,8 @@ depots/
 venv/
 virtualenv/
 extract/
+clientmanifests/
+clientpackages/
 *.swp
 depot_keys.txt
 last_change.txt
