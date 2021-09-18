@@ -81,7 +81,7 @@ if __name__ == "__main__":
                     if sha.digest() != chunk.sha:
                         print("ERROR: sha1 checksum mismatch (expected %s, got %s)" % (hexlify(chunk.sha).decode(), sha.hexdigest()))
                 if not args.dry_run:
-                    with open("./extract/" + file.filename, "wb") as f:
+                    with open("./extract/" + file.filename, "ab") as f:
                         f.seek(chunk.offset)
                         f.write(decompressed)
         except IsADirectoryError:
