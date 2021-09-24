@@ -91,5 +91,4 @@ if __name__ == "__main__":
     else:
         print("Archiving all latest depots for", appinfo['common']['name'], "build", appinfo['depots']['branches']['public']['buildid'])
         for manifest in c.get_manifests(appid, decrypt=False):
-            breakpoint()
             archive_manifest(manifest, c)
