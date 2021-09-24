@@ -10,14 +10,15 @@ if __name__ == "__main__": # exit before we import our shit if the args are wron
         exit(1)
 
 from steam.client import SteamClient
-from steam.client.cdn import CDNClient
+from steam.client.cdn import CDNClient, CDNDepotManifest
 from steam.core.msg import MsgProto
 from steam.enums.emsg import EMsg
 from steam.protobufs.content_manifest_pb2 import ContentManifestPayload
 from vdf import loads
 
 def archive_manifest(manifest, c):
-    print("Archiving", manifest.depot_id, "(%s)" % (manifest.name), "gid", manifest.gid, "from", datetime.fromtimestamp(manifest.creation_time))
+    name = manifest.name if manifest.name else "unknown"
+    print("Archiving", manifest.depot_id, "(%s)" % (name), "gid", manifest.gid, "from", datetime.fromtimestamp(manifest.creation_time))
     dest = "./depots/" + str(manifest.depot_id) + "/"
     makedirs(dest, exist_ok=True)
     print("Saving manifest...") # write manifest to disk. this will be a standard Zip with protobuf data inside
@@ -79,9 +80,16 @@ if __name__ == "__main__":
 
     if depotid and manifestid:
         print("Archiving", appinfo['common']['name'], "depot", depotid, "manifest", manifestid)
-        manifest = c.get_manifest(appid, depotid, manifestid, decrypt=False)
+        dest = "./depots/%s/%s.zip" % (depotid, manifestid)
+        if path.exists(dest):
+            with open(dest, "rb") as f:
+                manifest = CDNDepotManifest(c, appid, f.read())
+                print("Loaded cached manifest %s from disk" % manifestid)
+        else:
+            manifest = c.get_manifest(appid, depotid, manifestid, decrypt=False)
         archive_manifest(manifest, c)
     else:
         print("Archiving all latest depots for", appinfo['common']['name'], "build", appinfo['depots']['branches']['public']['buildid'])
         for manifest in c.get_manifests(appid, decrypt=False):
+            breakpoint()
             archive_manifest(manifest, c)
