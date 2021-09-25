@@ -41,6 +41,11 @@ Usage for the scripts:
   channel, e.g. ``get_client.py steam_client_ubuntu12``, ``get_client.py
   steam_client_publicbeta_osx``, ``get_client.py steam_cmd_linux``,
   ``get_client.py steamchina_win32``, etc.
+- ``unpack_sis.py`` unpacks a Steam game backup or retail master (which consists
+  of a sku.sis manifest, csd files containing depot data, and cdm files
+  containing metadata about the locations of chunks in the csd.) You need to
+  have a downloaded copy of the manifest to unpack a sis (you can get one by
+  running depot_archiver in dry run mode, using the -d flag.)
 
 For help finding appids, depotids, and manifests, check out
 https://steamdb.info
