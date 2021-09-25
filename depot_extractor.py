@@ -5,7 +5,7 @@ from datetime import datetime
 from hashlib import sha1
 from io import BytesIO
 from os import makedirs, remove
-from os.path import dirname
+from os.path import dirname, exists
 from pathlib import Path
 from struct import unpack
 from sys import argv
@@ -58,28 +58,35 @@ if __name__ == "__main__":
         try:
             for chunk in file.chunks:
                 chunkhex = hexlify(chunk.sha).decode()
-                with open(path + chunkhex, "rb") as chunkfile:
-                    decrypted = symmetric_decrypt(chunkfile.read(), args.depotkey)
-                    decompressed = None
-                    if decrypted[:2] == b'VZ': # LZMA
-                        if args.dry_run:
-                            print("Testing", file.filename, "(LZMA) from chunk", chunkhex)
-                        else:
-                            print("Extracting", file.filename, "(LZMA) from chunk", chunkhex)
-                        decompressed = lzma.LZMADecompressor(lzma.FORMAT_RAW, filters=[lzma._decode_filter_properties(lzma.FILTER_LZMA1, decrypted[7:12])]).decompress(decrypted[12:-9])[:chunk.cb_original]
-                    elif decrypted[:2] == b'PK': # Zip
-                        if args.dry_run:
-                            print("Testing", file.filename, "(Zip) from chunk", chunkhex)
-                        else:
-                            print("Extracting", file.filename, "(Zip) from chunk", chunkhex)
-                        zipfile = ZipFile(BytesIO(decrypted))
-                        decompressed = zipfile.read(zipfile.filelist[0])
+                if exists(path + chunkhex):
+                    with open(path + chunkhex, "rb") as chunkfile:
+                        decrypted = symmetric_decrypt(chunkfile.read(), args.depotkey)
+                elif exists(path + chunkhex + "_decrypted"):
+                    with open(path + chunkhex + "_decrypted", "rb") as chunkfile:
+                        decrypted = chunkfile.read()
+                else:
+                    print("missing chunk " + chunkhex)
+                    continue
+                decompressed = None
+                if decrypted[:2] == b'VZ': # LZMA
+                    if args.dry_run:
+                        print("Testing", file.filename, "(LZMA) from chunk", chunkhex)
                     else:
-                        print("ERROR: unknown archive type", decrypted[:2].decode())
-                        exit(1)
-                    sha = sha1(decompressed)
-                    if sha.digest() != chunk.sha:
-                        print("ERROR: sha1 checksum mismatch (expected %s, got %s)" % (hexlify(chunk.sha).decode(), sha.hexdigest()))
+                        print("Extracting", file.filename, "(LZMA) from chunk", chunkhex)
+                    decompressed = lzma.LZMADecompressor(lzma.FORMAT_RAW, filters=[lzma._decode_filter_properties(lzma.FILTER_LZMA1, decrypted[7:12])]).decompress(decrypted[12:-9])[:chunk.cb_original]
+                elif decrypted[:2] == b'PK': # Zip
+                    if args.dry_run:
+                        print("Testing", file.filename, "(Zip) from chunk", chunkhex)
+                    else:
+                        print("Extracting", file.filename, "(Zip) from chunk", chunkhex)
+                    zipfile = ZipFile(BytesIO(decrypted))
+                    decompressed = zipfile.read(zipfile.filelist[0])
+                else:
+                    print("ERROR: unknown archive type", decrypted[:2].decode())
+                    exit(1)
+                sha = sha1(decompressed)
+                if sha.digest() != chunk.sha:
+                    print("ERROR: sha1 checksum mismatch (expected %s, got %s)" % (hexlify(chunk.sha).decode(), sha.hexdigest()))
                 if not args.dry_run:
                     with open("./extract/" + file.filename, "ab") as f:
                         f.seek(chunk.offset)
