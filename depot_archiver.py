@@ -1,13 +1,17 @@
 #!/usr/bin/env python3
+from argparse import ArgumentParser
 from binascii import hexlify
 from datetime import datetime
 from os import makedirs, path
 from sys import argv
 
 if __name__ == "__main__": # exit before we import our shit if the args are wrong
-    if len(argv) < 2 or len(argv) == 3:
-        print("usage:", argv[0], "appid [depotid manifestid]")
-        exit(1)
+    parser = ArgumentParser(description='Download Steam content depots for archival.\nSpecify an app to download all the depots for that app, or an app, depot ID, and manifest ID to download a specific version of a depot.')
+    parser.add_argument("appid", type=int, help="App ID to download depots for.")
+    parser.add_argument("depotid", type=int, nargs='?', help="Depot ID to download.")
+    parser.add_argument("manifestid", type=int, nargs='?', help="Manifest ID to download.")
+    parser.add_argument("-d", help="Dry run: download manifest (file metadata) without actually downloading files", dest="dry_run", action="store_true")
+    args = parser.parse_args()
 
 from steam.client import SteamClient
 from steam.client.cdn import CDNClient, CDNDepotManifest
@@ -16,7 +20,7 @@ from steam.enums.emsg import EMsg
 from steam.protobufs.content_manifest_pb2 import ContentManifestPayload
 from vdf import loads
 
-def archive_manifest(manifest, c):
+def archive_manifest(manifest, c, dry_run=False):
     name = manifest.name if manifest.name else "unknown"
     print("Archiving", manifest.depot_id, "(%s)" % (name), "gid", manifest.gid, "from", datetime.fromtimestamp(manifest.creation_time))
     dest = "./depots/" + str(manifest.depot_id) + "/"
@@ -24,6 +28,9 @@ def archive_manifest(manifest, c):
     print("Saving manifest...") # write manifest to disk. this will be a standard Zip with protobuf data inside
     with open(dest + str(manifest.gid) + ".zip", "wb") as f:
         f.write(manifest.serialize())
+    if dry_run:
+        print("Not downloading chunks (dry run)")
+        return
     known_chunks = []
     for file in manifest.payload.mappings:
         for chunk in file.chunks:
@@ -47,14 +54,6 @@ if __name__ == "__main__":
     makedirs("./appinfo", exist_ok=True)
     makedirs("./depots", exist_ok=True)
 
-    appid = int(argv[1])
-    if len(argv) == 4:
-        depotid = int(argv[2])
-        manifestid = int(argv[3])
-    else:
-        depotid = 0
-        manifestid = 0
-
     steam_client = SteamClient()
     print("Connecting to the Steam network...")
     steam_client.connect()
@@ -63,32 +62,33 @@ if __name__ == "__main__":
     c = CDNClient(steam_client)
 
     # Fetch appinfo
-    print("Fetching appinfo for", appid)
+    print("Fetching appinfo for", args.appid)
     msg = MsgProto(EMsg.ClientPICSProductInfoRequest)
-    msg.body.apps.add().appid = appid
+    msg.body.apps.add().appid = args.appid
     appinfo_response = steam_client.wait_event(steam_client.send_job(msg))[0].body.apps[0]
     changenumber = appinfo_response.change_number
     # Write vdf appinfo to disk
-    appinfo_path = "./appinfo/%s_%s.vdf" % (appid, changenumber)
+    appinfo_path = "./appinfo/%s_%s.vdf" % (args.appid, changenumber)
     if not path.exists(appinfo_path):
         with open(appinfo_path, "wb") as f:
             f.write(appinfo_response.buffer[:-1])
-            print("Saved appinfo for app", appid, "changenumber", changenumber)
+            print("Saved appinfo for app", args.appid, "changenumber", changenumber)
 
     # decode appinfo
     appinfo = loads(appinfo_response.buffer[:-1].decode('utf-8', 'replace'))['appinfo']
 
-    if depotid and manifestid:
-        print("Archiving", appinfo['common']['name'], "depot", depotid, "manifest", manifestid)
-        dest = "./depots/%s/%s.zip" % (depotid, manifestid)
+    # TODO: download depot without specifying manifest
+    if args.depotid and args.manifestid:
+        print("Archiving", appinfo['common']['name'], "depot", args.depotid, "manifest", args.manifestid)
+        dest = "./depots/%s/%s.zip" % (args.depotid, args.manifestid)
         if path.exists(dest):
             with open(dest, "rb") as f:
-                manifest = CDNDepotManifest(c, appid, f.read())
-                print("Loaded cached manifest %s from disk" % manifestid)
+                manifest = CDNDepotManifest(c, args.appid, f.read())
+                print("Loaded cached manifest %s from disk" % args.manifestid)
         else:
-            manifest = c.get_manifest(appid, depotid, manifestid, decrypt=False)
-        archive_manifest(manifest, c)
+            manifest = c.get_manifest(args.appid, args.depotid, args.manifestid, decrypt=False)
+        archive_manifest(manifest, c, args.dry_run)
     else:
         print("Archiving all latest depots for", appinfo['common']['name'], "build", appinfo['depots']['branches']['public']['buildid'])
-        for manifest in c.get_manifests(appid, decrypt=False):
-            archive_manifest(manifest, c)
+        for manifest in c.get_manifests(args.appid, decrypt=False):
+            archive_manifest(manifest, c, args.dry_run)
