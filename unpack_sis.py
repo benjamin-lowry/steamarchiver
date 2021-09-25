@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 from binascii import hexlify, unhexlify
-from os import path
-from steam.core.manifest import DepotManifest
+from os import path, makedirs
 from sys import argv
 from struct import iter_unpack
 from vdf import loads
@@ -9,29 +8,16 @@ from re import sub
 from io import BytesIO
 
 def unpack_sis(sku, chunkstore_path):
+    need_manifests = {}
     chunkstore_path = sub(r'Disk_\d+', '', chunkstore_path)
     if "sku" in sku.keys():
         sku = sku["sku"]
-    # load manifests for all the depots
-    manifests = {}
-    for depot in sku['manifests']:
-        target = "./depots/%s/%s.zip" % (depot, sku['manifests'][depot])
-        if not path.exists(target):
-            print("missing depot %s manifest %s" % (depot, sku['manifests'][depot]))
-            exit(1)
-        with open(target, "rb") as f:
-            manifests[depot] = DepotManifest(f.read())
 
     # unpack each depot
     highest_disk = 1
-    for depot, manifest in manifests.items():
-        chunk_crcs = {}
-        # get a list of the chunks we need
-        for mapping in manifest.payload.mappings:
-            for chunk in mapping.chunks:
-                chunk_crcs[chunk.sha] = chunk.crc
-
-        # unpack each chunkstore
+    for depot in sku["manifests"]:
+        need_manifests[depot] = sku["manifests"][depot]
+        makedirs("./depots/%s" % depot, exist_ok=True)
         for chunkstore in sku["chunkstores"][depot]:
             print("unpacking chunkstore %s" % chunkstore)
             target = chunkstore_path + "/%s_depotcache_%s" % (depot, chunkstore)
@@ -83,6 +69,10 @@ def unpack_sis(sku, chunkstore_path):
                     with open("./depots/%s/%s_decrypted" % (depot, hexlify(sha).decode()), "wb") as f:
                         print("writing %s bytes" % length)
                         f.write(csdfile.read(length))
+    print("done unpacking, to extract with depot_extractor you will need these manifests:")
+    for depot, manifest in need_manifests.items():
+        print("depot %s manifest %s" % (depot, manifest))
+    return True
 
 if __name__ == "__main__":
     if len(argv) != 2:

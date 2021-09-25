@@ -43,9 +43,11 @@ Usage for the scripts:
   ``get_client.py steamchina_win32``, etc.
 - ``unpack_sis.py`` unpacks a Steam game backup or retail master (which consists
   of a sku.sis manifest, csd files containing depot data, and cdm files
-  containing metadata about the locations of chunks in the csd.) You need to
-  have a downloaded copy of the manifest to unpack a sis (you can get one by
-  running depot_archiver in dry run mode, using the -d flag.)
+  containing metadata about the locations of chunks in the csd.) Unpacking with
+  this script is free, but for actually extracting the data afterward with
+  depot_extractor you need to have a downloaded copy of the manifest (you can
+  get one by running depot_archiver in dry run mode, using the -d flag) and the
+  decryption key.
 
 For help finding appids, depotids, and manifests, check out
 https://steamdb.info
