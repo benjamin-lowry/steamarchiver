@@ -3,9 +3,10 @@ import requests as r
 from argparse import ArgumentParser
 from vdf import loads
 from sys import argv
-from os import makedirs
-from os.path import exists
+from os import makedirs, listdir
+from os.path import exists, basename
 from hashlib import sha256
+from re import compile
 
 # TODO: code to load cachedupdatehosts.vdf
 CDN_ROOT = "https://steamcdn-a.akamaihd.net/client/"
@@ -43,8 +44,41 @@ if __name__ == "__main__":
     parser = ArgumentParser(description="Downloads a version of the Steam client from CDN")
     parser.add_argument("clientname", nargs="?", help="name of the client to download (e.g. \"steam_client_win32\")", default="steam_client_win32")
     parser.add_argument("-d", dest="dry_run", help="dry run: download client manifest but don't download packages", action="store_true")
+    parser.add_argument("-l", dest="local", help="don't download a new manifest, just try to download packages for manifests that have already been downloaded", action="store_true")
     args = parser.parse_args()
-    if args.dry_run:
+    if args.dry_run and args.local:
+        print("invalid combination of arguments")
+        parser.print_help()
+        exit(1)
+    elif args.local:
+        pattern = compile("_\d+$")
+        if exists(args.clientname):
+            platform = pattern.sub("", basename(args.clientname)).split("_")
+            platform = platform[len(platform) - 1]
+            with open(args.clientname, "r") as f:
+                download_packages(loads(f.read()), platform)
+        elif exists("./clientmanifests/" + args.clientname):
+            platform = pattern.sub("", basename("./clientmanifests/" + args.clientname)).split("_")
+            platform = platform[len(platform) - 1]
+            with open("./clientmanifests/" + args.clientname, "r") as f:
+                download_packages(loads(f.read()), platform)
+        else:
+            # try to find the newest manifest we downloaded
+            highest = 0
+            for file in listdir("./clientmanifests/"):
+                if pattern.sub("", file) == args.clientname:
+                    match = pattern.search(file)
+                    version = int(file[match.start() + 1:match.end()])
+                    if version > highest:
+                        highest = version
+            if highest == 0:
+                print("can't find manifest " + args.clientname)
+                exit(1)
+            platform = basename("./clientmanifests/" + args.clientname).split("_")
+            platform = platform[len(platform) - 1]
+            with open("./clientmanifests/%s_%s" % (args.clientname, highest), "r") as f:
+                download_packages(loads(f.read()), platform)
+    elif args.dry_run:
         save_client_manifest(args.clientname)
     else:
         download_packages(*save_client_manifest(args.clientname))
