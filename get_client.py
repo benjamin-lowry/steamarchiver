@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import requests as r
+from argparse import ArgumentParser
 from vdf import loads
 from sys import argv
 from os import makedirs
@@ -38,9 +39,11 @@ def download_packages(client_manifest, platform):
                 print("Saved package", package_name)
 
 if __name__ == "__main__":
-    if len(argv) == 1:
-        download_packages(*save_client_manifest("steam_client_win32"))
-    elif len(argv) == 2:
-        download_packages(*save_client_manifest(argv[1]))
+    parser = ArgumentParser(description="Downloads a version of the Steam client from CDN")
+    parser.add_argument("clientname", nargs="?", help="name of the client to download (e.g. \"steam_client_win32\")", default="steam_client_win32")
+    parser.add_argument("-d", dest="dry_run", help="dry run: download client manifest but don't download packages", action="store_true")
+    args = parser.parse_args()
+    if args.dry_run:
+        save_client_manifest(args.clientname)
     else:
-        print("usage: %s [client type]" % argv[0])
+        download_packages(*save_client_manifest(args.clientname))
