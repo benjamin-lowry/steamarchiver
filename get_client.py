@@ -25,6 +25,7 @@ def save_client_manifest(name):
 
 def download_packages(client_manifest, platform):
     makedirs("./clientpackages", exist_ok=True)
+    print("Downloading packages for client version %s" % client_manifest[platform]['version'])
     del client_manifest[platform]['version']
     for package_name, package in client_manifest[platform].items():
         needs_download = True
