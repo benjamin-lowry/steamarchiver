@@ -1,12 +1,12 @@
 # steamarchiver
 
-A set of Python scripts to preserve Steam content, including tools to archive
-app information, archive depots in SteamPipe CDN content and extract them, and
+A set of utilities to preserve Steam content, including tools to archive app
+information, archive depots in SteamPipe CDN content and extract them, and
 download versions of the Steam client.
 
 ## Usage
 
-First install the requirements:
+For the Python scripts, install the requirements:
 
 ``pip3 install -r requirements.txt``
 
@@ -48,6 +48,12 @@ Usage for the scripts:
   depot_extractor you need to have a downloaded copy of the manifest (you can
   get one by running depot_archiver in dry run mode, using the -d flag) and the
   decryption key.
+
+The folder steamlancache contains an HTTP server (written in Golang) that you
+can use as a LAN cache for Steam to speed up downloads and automatically archive
+all the content you download in the formats these scripts expect. Just run the
+server with the folder the Python scripts are in as the working directory, and
+set a DNS record to point "lancache.steamcontent.com" to the IP of the server.
 
 For help finding appids, depotids, and manifests, check out
 https://steamdb.info
