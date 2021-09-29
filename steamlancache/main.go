@@ -16,11 +16,57 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 )
 
+type fileLock struct {
+	mutex		sync.Mutex
+	refCountMutex	sync.Mutex
+	count		int
+}
+
+var lockedFiles map[string]*fileLock
+var mapLock sync.Mutex
+
 func main() {
+	lockedFiles = make(map[string]*fileLock)
 	manifestTrailingFive := regexp.MustCompile("\\/5(\\/\\d+)?$")
 	fmt.Println(http.ListenAndServe("0.0.0.0:80", http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+		mapLock.Lock()
+		lock, locked := lockedFiles[r.URL.Path]
+		mapLock.Unlock()
+		if locked && lock != nil {
+			fmt.Println("getting lock for " + r.URL.Path)
+			lock.refCountMutex.Lock()
+			lock.count++
+			lock.refCountMutex.Unlock()
+			lock.mutex.Lock()
+			lock.refCountMutex.Lock()
+			lock.count--
+			lock.refCountMutex.Unlock()
+		} else {
+			fmt.Println("creating lock for " + r.URL.Path)
+			lock = &fileLock{}
+			mapLock.Lock()
+			lockedFiles[r.URL.Path] = lock
+			mapLock.Unlock()
+			lock.mutex.Lock()
+		}
+		fmt.Println("obtained lock on " + r.URL.Path)
+		defer func() {
+			lock.refCountMutex.Lock()
+			if lock.count == 0 {
+				mapLock.Lock()
+				lockedFiles[r.URL.Path] = nil
+				mapLock.Unlock()
+				fmt.Println("destroyed lock on " + r.URL.Path)
+			} else {
+				lock.mutex.Unlock()
+				fmt.Println("released lock on " + r.URL.Path)
+				lock.refCountMutex.Unlock()
+			}
+		}()
+
 		if r.Host == "" || r.Host == "127.0.0.1" {
 			rw.WriteHeader(400)
 			rw.Write([]byte("Missing host header.\n"))
