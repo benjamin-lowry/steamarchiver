@@ -115,10 +115,21 @@ func main() {
 						fmt.Println("can't cache file " + cachePath + ": " + e.Error())
 						io.Copy(rw, resp.Body)
 					} else {
-						defer file.Close()
 						tee := io.TeeReader(resp.Body, file)
 						io.Copy(rw, tee)
-						fmt.Println("cached: " + cachePath)
+						file.Close()
+						// don't save the cached copy if the connection was cancelled
+						info, e := os.Stat(cachePath)
+						if e != nil {
+							fmt.Println("couldn't stat cached file: " + e.Error())
+						} else if info.Size() != resp.ContentLength {
+							fmt.Println("wrong length (transfer interrupted?) for file " + cachePath)
+							if e = os.Remove(cachePath); e != nil {
+								fmt.Println("couldn't delete corrupt file: " + e.Error())
+							}
+						} else {
+							fmt.Println("cached: " + cachePath)
+						}
 					}
 				} else {
 					fmt.Println(e)
