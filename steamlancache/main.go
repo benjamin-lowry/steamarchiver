@@ -115,10 +115,9 @@ func main() {
 						fmt.Println("can't cache file " + cachePath + ": " + e.Error())
 						io.Copy(rw, resp.Body)
 					} else {
-						tee := io.TeeReader(resp.Body, file)
-						io.Copy(rw, tee)
+						io.Copy(file, resp.Body)
 						file.Close()
-						// don't save the cached copy if the connection was cancelled
+						// check if the connection was cancelled
 						info, e := os.Stat(cachePath)
 						if e != nil {
 							fmt.Println("couldn't stat cached file: " + e.Error())
@@ -129,6 +128,11 @@ func main() {
 							}
 						} else {
 							fmt.Println("cached: " + cachePath)
+							file, e := os.Open(cachePath)
+							if e != nil {
+								fmt.Println("couldn't re-read cached file: " + e.Error())
+							}
+							io.Copy(rw, file)
 						}
 					}
 				} else {
