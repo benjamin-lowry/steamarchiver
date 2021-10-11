@@ -10,7 +10,7 @@ For the Python scripts, install the requirements:
 
 ``pip3 install -r requirements.txt``
 
-Usage for the scripts:
+Usage for the Python scripts:
 
 - ``depot_archiver.py`` downloads depots (the logical groupings of game content
   files Steam delivers). You can give it an appid, in which case it'll download
@@ -48,6 +48,8 @@ Usage for the scripts:
   depot_extractor you need to have a downloaded copy of the manifest (you can
   get one by running depot_archiver in dry run mode, using the -d flag) and the
   decryption key.
+- ``steam_websocket_mitm.py`` is an mitmproxy script to inspect Steam's
+  WebSockets network traffic. This is only really useful for debugging.
 
 The folder steamlancache contains an HTTP server (written in Golang) that you
 can use as a LAN cache for Steam to speed up downloads and automatically archive
