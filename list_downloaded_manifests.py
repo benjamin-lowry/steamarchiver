@@ -30,8 +30,12 @@ def print_app_info(appid, duplicate_appinfo=False):
             pass
     if duplicate_appinfo:
         for change in changenumbers:
-            with open("./appinfo/%s_%s.vdf" % (appid, change), "r", encoding="utf-8") as f:
-                appinfo = loads(f.read())
+            with open("./appinfo/%s_%s.vdf" % (appid, change), "rb") as f:
+                try:
+                    appinfo = loads(f.read().decode("utf-8"))
+                except UnicodeDecodeError:
+                    f.seek(0)
+                    appinfo = loads(f.read().decode("latin1"))
             if 'common' not in appinfo['appinfo'].keys():
                 print("App %s change #%s (no common info)" % (appid, change))
             elif 'name' not in appinfo['appinfo']['common'].keys():
@@ -45,8 +49,12 @@ def print_app_info(appid, duplicate_appinfo=False):
         except StopIteration:
             print("No local appinfo for app", appid)
             return
-        with open("./appinfo/%s_%s.vdf" % (appid, highest_changenumber), "r", encoding="utf-8") as f:
-            appinfo = loads(f.read())
+        with open("./appinfo/%s_%s.vdf" % (appid, highest_changenumber), "rb") as f:
+            try:
+                appinfo = loads(f.read().decode("utf-8"))
+            except UnicodeDecodeError:
+                f.seek(0)
+                appinfo = loads(f.read().decode("latin1"))
         if 'common' not in appinfo['appinfo'].keys():
             print("App %s change #%s (no common info)" % (appid, highest_changenumber))
         elif 'name' not in appinfo['appinfo']['common'].keys():
