@@ -79,6 +79,7 @@ def print_branches(appinfo):
     depots = []
     depot_branch_manifests = {}
     depot_names = {}
+    depot_files = {}
     depots_downloaded = {}
     if 'depots' not in appinfo['appinfo'].keys():
         print("\t[App contains no depots.]")
@@ -111,25 +112,34 @@ def print_branches(appinfo):
             print("\t\t[No manifest information, this branch requires a password.]")
         else:
             for depot in depots:
+                if not depot in depot_files.keys():
+                    try:
+                        depot_files[depot] = listdir("./depots/%s/" % depot)
+                    except FileNotFoundError:
+                        print("\t\t[Missing depot %s (%s).]" % (depot, depot_names[depot]))
+                        continue
                 if branch_name in depot_branch_manifests[depot].keys():
-                    if print_depot_info(depot, name=depot_names[depot],
+                    if print_depot_info(depot, depot_files[depot],
+                            name=depot_names[depot],
                             manifests=[depot_branch_manifests[depot][branch_name]],
                             print_not_exists=True):
                         depots_downloaded[branch_name] += 1
                 elif "public" in depot_branch_manifests[depot].keys():
-                    if print_depot_info(depot, name=depot_names[depot],
+                    if print_depot_info(depot, depot_files[depot],
+                            name=depot_names[depot],
                             manifests=[depot_branch_manifests[depot]["public"]],
                             print_not_exists=True):
                         depots_downloaded[branch_name] += 1
                 else:
-                    if print_depot_info(depot, name=depot_names[depot],
+                    if print_depot_info(depot, depot_files[depot],
+                            name=depot_names[depot],
                             print_not_exists=True):
                         depots_downloaded[branch_name] += 1
             print("\t\tDepots available: %s/%s" % (depots_downloaded[branch_name], len(depots)))
     if 'public' in appinfo['appinfo']['depots']['branches'].keys():
         print("\t%s/%s depots for %s are up-to-date with the public branch" % (depots_downloaded["public"], len(depots), appinfo['appinfo']['common']['name']))
 
-def print_depot_info(depotid, manifests=None, print_not_exists=True, name=None):
+def print_depot_info(depotid, depot_files, manifests=None, print_not_exists=True, name=None):
     path = "./depots/%s/" % depotid
     if not exists(path):
         if name:
@@ -144,7 +154,7 @@ def print_depot_info(depotid, manifests=None, print_not_exists=True, name=None):
     if manifests:
         results = []
         for manifest in manifests:
-            results.append(print_manifest_info(depotid, manifest, print_not_exists, name))
+            results.append(print_manifest_info(depotid, manifest, depot_files, print_not_exists, name))
         if all(x for x in results):
             return True
         else:
@@ -154,7 +164,7 @@ def print_depot_info(depotid, manifests=None, print_not_exists=True, name=None):
             results = []
             for file in listdir(path):
                 if file.endswith(".zip"):
-                    results.append(print_manifest_info(depotid, int(file.replace(".zip", "")), print_not_exists, name))
+                    results.append(print_manifest_info(depotid, int(file.replace(".zip", "")), depot_files, print_not_exists, name))
             if all(x for x in results):
                 return True
             else:
@@ -166,7 +176,7 @@ def print_depot_info(depotid, manifests=None, print_not_exists=True, name=None):
                 print("\t\tDepot %s not found" % depotid)
             return False
 
-def print_manifest_info(depotid, manifestid, print_not_exists=True, name=None):
+def print_manifest_info(depotid, manifestid, depot_files, print_not_exists=True, name=None):
     manifests = []
     manifest_zip = "./depots/%s/%s.zip" % (depotid, manifestid)
     chunks_on_disk = 0
@@ -188,7 +198,7 @@ def print_manifest_info(depotid, manifestid, print_not_exists=True, name=None):
                 chunkhex = hexlify(chunk.sha).decode()
                 if not chunkhex in chunks_known:
                     chunks_known.append(chunkhex)
-                if exists("./depots/%s/%s" % (depotid, chunkhex)) or exists("./depots/%s/%s_decrypted" % (depotid, chunkhex)):
+                if chunkhex or (chunkhex + "_decrypted") in depot_files:
                     if not chunkhex in chunks_on_disk:
                         chunks_on_disk.append(chunkhex)
                 else:
@@ -208,7 +218,7 @@ if __name__ == "__main__":
             print_app_info(app, args.duplicate_appinfo)
     elif args.depotid:
         for depot in args.depotid:
-            print_depot_info(depot, args.manifestid)
+            print_depot_info(depot, listdir("./depots/%s/" % depot), args.manifestid)
     else:
         for depot in sorted([int(x) for x in listdir("./depots/")]):
-            print_depot_info(depot, args.manifestid, print_not_exists=False)
+            print_depot_info(depot, listdir("./depots/%s/" % depot), args.manifestid, print_not_exists=False)
