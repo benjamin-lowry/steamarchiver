@@ -30,7 +30,7 @@ def print_app_info(appid, duplicate_appinfo=False):
             pass
     if duplicate_appinfo:
         for change in changenumbers:
-            with open("./appinfo/%s_%s.vdf" % (appid, change), "r") as f:
+            with open("./appinfo/%s_%s.vdf" % (appid, change), "r", encoding="utf-8") as f:
                 appinfo = loads(f.read())
             if 'common' not in appinfo['appinfo'].keys():
                 print("App %s change #%s (no common info)" % (appid, change))
@@ -45,7 +45,7 @@ def print_app_info(appid, duplicate_appinfo=False):
         except StopIteration:
             print("No local appinfo for app", appid)
             return
-        with open("./appinfo/%s_%s.vdf" % (appid, highest_changenumber), "r") as f:
+        with open("./appinfo/%s_%s.vdf" % (appid, highest_changenumber), "r", encoding="utf-8") as f:
             appinfo = loads(f.read())
         if 'common' not in appinfo['appinfo'].keys():
             print("App %s change #%s (no common info)" % (appid, highest_changenumber))
