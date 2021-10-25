@@ -31,9 +31,12 @@ if __name__ == "__main__":
     licensed_packages = []
     licensed_apps = []
     licensed_depots = []
-    for license in steam_client.licenses.values():
-        print("Found license for package %s" % license.package_id)
-        licensed_packages.append(license.package_id)
+    if not steam_client.licenses:
+        licensed_packages = [17906] # if we don't have a license list, we're an anonymous account
+    else:
+        for license in steam_client.licenses.values():
+            print("Found license for package %s" % license.package_id)
+            licensed_packages.append(license.package_id)
     product_info = steam_client.get_product_info(packages=licensed_packages)
     for package in product_info['packages'].values():
         for depot in package['depotids'].values():
