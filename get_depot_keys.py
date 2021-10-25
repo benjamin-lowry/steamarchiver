@@ -91,9 +91,14 @@ if __name__ == "__main__":
                     print("skipping previously saved key for depot", depot)
                     continue
                 if depot in licensed_depots:
-                    key = steam_client.get_depot_key(app, depot).depot_encryption_key
-                    keys_saved.append(depot)
-                    if key != b'':
-                        key_hex = hexlify(key).decode()
-                        f.write("%s\t\t%s\t%s" % (depot, key_hex, info['name']) + "\n")
-                        print("%s\t\t%s\t%s" % (depot, key_hex, info['name']))
+                    try:
+                        key = steam_client.get_depot_key(app, depot).depot_encryption_key
+                    except AttributeError:
+                        print("error getting key for depot", depot)
+                        continue
+                    else:
+                        keys_saved.append(depot)
+                        if key != b'':
+                            key_hex = hexlify(key).decode()
+                            f.write("%s\t\t%s\t%s" % (depot, key_hex, info['name']) + "\n")
+                            print("%s\t\t%s\t%s" % (depot, key_hex, info['name']))
