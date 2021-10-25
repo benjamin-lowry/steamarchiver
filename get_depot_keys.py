@@ -69,14 +69,14 @@ if __name__ == "__main__":
 
     keys_saved = []
     if exists("./depot_keys.txt"):
-        with open("./depot_keys.txt", "r") as f:
+        with open("./depot_keys.txt", "r", encoding="utf-8") as f:
             for line in f.read().split("\n"):
                 try:
                     keys_saved.append(int((line.split("\t")[0])))
                 except ValueError:
                     continue
         print("%s keys already saved in depot_keys.txt" % len(keys_saved))
-    with open("./depot_keys.txt", "a") as f:
+    with open("./depot_keys.txt", "a", encoding="utf-8") as f:
         for app, app_info in app_dict.items():
             if not app in licensed_apps:
                 continue
