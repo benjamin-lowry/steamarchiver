@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
+from argparse import ArgumentParser
 from binascii import hexlify, unhexlify
-from os import path, makedirs
-from sys import argv
-from struct import iter_unpack
-from vdf import loads
-from re import sub
 from io import BytesIO
+from os import path, makedirs
+from re import sub
+from steam.core.crypto import symmetric_encrypt, symmetric_encrypt_with_iv
+from struct import iter_unpack
+from sys import argv
+from vdf import loads
 
-def unpack_sis(sku, chunkstore_path):
+def unpack_sis(sku, chunkstore_path, use_key = False):
     need_manifests = {}
     chunkstore_path = sub(r'Disk_\d+', '', chunkstore_path)
     if "sku" in sku.keys():
@@ -15,6 +17,15 @@ def unpack_sis(sku, chunkstore_path):
 
     # unpack each depot
     for depot in sku["manifests"]:
+        key = None
+        if use_key:
+            if path.exists("./depot_keys.txt"):
+                with open("./depot_keys.txt", "r", encoding="utf-8") as f:
+                    for line in f.read().split("\n"):
+                        line = line.split("\t")
+                        if line[0] == depot:
+                            key_hex = line[2]
+                            key = unhexlify(key_hex)
         need_manifests[depot] = sku["manifests"][depot]
         makedirs("./depots/%s" % depot, exist_ok=True)
         for chunkstore in sku["chunkstores"][depot]:
@@ -63,24 +74,27 @@ def unpack_sis(sku, chunkstore_path):
                                 length = potential_eof + 22 - offset
                                 break
                     csdfile.seek(offset)
-                    with open("./depots/%s/%s_decrypted" % (depot, hexlify(sha).decode()), "wb") as f:
-                        print("writing %s bytes" % length)
-                        f.write(csdfile.read(length))
+                    if key:
+                        with open("./depots/%s/%s" % (depot, hexlify(sha).decode()), "wb") as f:
+                            print("writing %s bytes re-encrypted using key %s and random IV" % (length, key_hex))
+                            f.write(symmetric_encrypt(csdfile.read(length), key))
+                    else:
+                        with open("./depots/%s/%s_decrypted" % (depot, hexlify(sha).decode()), "wb") as f:
+                            print("writing %s bytes unencrypted" % length)
+                            f.write(csdfile.read(length))
     print("done unpacking, to extract with depot_extractor you will need these manifests:")
     for depot, manifest in need_manifests.items():
         print("depot %s manifest %s" % (depot, manifest))
     return True
 
 if __name__ == "__main__":
-    if len(argv) != 2:
-        print("usage: " + argv[0] + " sku.sis")
-        exit(1)
-    if not path.exists(argv[1]):
-        print("file not found: " + argv[1])
-        exit(1)
-    with open(argv[1], "r") as f:
+    parser = ArgumentParser(description='Unpacks game data chunks from a SteamPipe retail master or game backup.')
+    parser.add_argument("sku", type=str, help="Path to the sku.sis file defining the master to unpack.")
+    parser.add_argument("-e", action='store_true', help="Re-encrypt the chunks with a key from depot_keys.txt (if one is available) after extracting. (The primary reason you would want to do this is to serve the chunks to a Steam client over a LAN cache.)", dest="key")
+    args = parser.parse_args()
+    with open(args.sku, "r") as f:
         sku = loads(f.read())
-    chunkstore_path = path.dirname(argv[1])
+    chunkstore_path = path.dirname(args.sku)
     if chunkstore_path == "":
         chunkstore_path = "."
-    exit(0 if unpack_sis(sku, chunkstore_path) else 1)
+    exit(0 if unpack_sis(sku, chunkstore_path, args.key) else 1)
