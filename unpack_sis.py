@@ -14,7 +14,6 @@ def unpack_sis(sku, chunkstore_path):
         sku = sku["sku"]
 
     # unpack each depot
-    highest_disk = 1
     for depot in sku["manifests"]:
         need_manifests[depot] = sku["manifests"][depot]
         makedirs("./depots/%s" % depot, exist_ok=True)
@@ -27,7 +26,7 @@ def unpack_sis(sku, chunkstore_path):
                 if not path.exists(target + ".csm"):
                     # try again with other disk folders?
                     disk = 1
-                    while disk <= highest_disk:
+                    while disk <= int(sku["disks"]):
                         target = chunkstore_path + "/Disk_%s/%s_depotcache_%s" % (disk, depot, chunkstore)
                         print("searching for depot %s in disk %s" % (depot, disk))
                         if path.exists(target + ".csm"):
@@ -37,8 +36,6 @@ def unpack_sis(sku, chunkstore_path):
                         # welp
                         print("couldn't find depot %s chunkstore %s" % (depot, chunkstore))
                         return False
-                if int(chunkstore) > highest_disk:
-                    highest_disk = int(chunkstore)
             # unpack this chunkstore
             with open(target + ".csm", "rb") as csmfile, open(target + ".csd", "rb") as csdfile:
                 csm = csmfile.read()
