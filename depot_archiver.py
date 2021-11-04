@@ -6,7 +6,7 @@ from os import makedirs, path
 from sys import argv
 
 if __name__ == "__main__": # exit before we import our shit if the args are wrong
-    parser = ArgumentParser(description='Download Steam content depots for archival.\nSpecify an app to download all the depots for that app, or an app, depot ID, and manifest ID to download a specific version of a depot.')
+    parser = ArgumentParser(description='Download Steam content depots for archival.\nSpecify an app to download all the depots for that app, or an app and depot ID to download the latest version of that depot (or a specific version if the manifest ID is specified.)')
     parser.add_argument("appid", type=int, help="App ID to download depots for.")
     parser.add_argument("depotid", type=int, nargs='?', help="Depot ID to download.")
     parser.add_argument("manifestid", type=int, nargs='?', help="Manifest ID to download.")
@@ -49,6 +49,17 @@ def archive_manifest(manifest, c, dry_run=False):
     print("\nFinished downloading", manifest.depot_id, "(%s)" % (manifest.name), "gid", manifest.gid, "from", datetime.fromtimestamp(manifest.creation_time))
     print("Downloaded %s chunks and skipped %s" % (chunks_dled, chunks_skipped))
 
+def try_load_manifest(appid, depotid, manifestid):
+    dest = "./depots/%s/%s.zip" % (depotid, manifestid)
+    if path.exists(dest):
+        with open(dest, "rb") as f:
+            manifest = CDNDepotManifest(c, appid, f.read())
+            print("Loaded cached manifest %s from disk" % manifestid)
+    else:
+        manifest = c.get_manifest(appid, depotid, manifestid, decrypt=False)
+        print("Downloaded manifest %s" % manifestid)
+    return manifest
+
 if __name__ == "__main__":
     # Create directories
     makedirs("./appinfo", exist_ok=True)
@@ -77,17 +88,13 @@ if __name__ == "__main__":
     # decode appinfo
     appinfo = loads(appinfo_response.buffer[:-1].decode('utf-8', 'replace'))['appinfo']
 
-    # TODO: download depot without specifying manifest
     if args.depotid and args.manifestid:
         print("Archiving", appinfo['common']['name'], "depot", args.depotid, "manifest", args.manifestid)
-        dest = "./depots/%s/%s.zip" % (args.depotid, args.manifestid)
-        if path.exists(dest):
-            with open(dest, "rb") as f:
-                manifest = CDNDepotManifest(c, args.appid, f.read())
-                print("Loaded cached manifest %s from disk" % args.manifestid)
-        else:
-            manifest = c.get_manifest(args.appid, args.depotid, args.manifestid, decrypt=False)
-        archive_manifest(manifest, c, args.dry_run)
+        archive_manifest(try_load_manifest(args.appid, args.depotid, args.manifestid), c, args.dry_run)
+    elif args.depotid:
+        print("Archiving", appinfo['common']['name'], "depot", args.depotid, "manifest", appinfo['depots'][str(args.depotid)]['manifests']['public'])
+        manifest = int(appinfo['depots'][str(args.depotid)]['manifests']['public'])
+        archive_manifest(try_load_manifest(args.appid, args.depotid, manifest), c, args.dry_run)
     else:
         print("Archiving all latest depots for", appinfo['common']['name'], "build", appinfo['depots']['branches']['public']['buildid'])
         for manifest in c.get_manifests(args.appid, decrypt=False):
