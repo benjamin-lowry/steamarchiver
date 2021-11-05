@@ -36,9 +36,15 @@ def download_packages(client_manifest, platform):
                     print("Package", package_name, "already up-to-date")
                     needs_download = False
         if needs_download:
-            with open("./clientpackages/" + package['file'], "wb") as f:
-                f.write(r.get(CDN_ROOT + package['file']).content)
-                print("Saved package", package_name)
+                response = r.get(CDN_ROOT + package['file'])
+                if response.ok:
+                    with open("./clientpackages/" + package['file'], "wb") as f:
+                        f.write(response.content)
+                    print("Saved package", package_name)
+                else:
+                    print(f"Unable to download package {package_name}: {response.status_code}")
+                    return False
+    return True
 
 if __name__ == "__main__":
     parser = ArgumentParser(description="Downloads a version of the Steam client from CDN")
@@ -56,12 +62,12 @@ if __name__ == "__main__":
             platform = pattern.sub("", basename(args.clientname)).split("_")
             platform = platform[len(platform) - 1]
             with open(args.clientname, "r") as f:
-                download_packages(loads(f.read()), platform)
+                exit(0 if download_packages(loads(f.read()), platform) else 1)
         elif exists("./clientmanifests/" + args.clientname):
             platform = pattern.sub("", basename("./clientmanifests/" + args.clientname)).split("_")
             platform = platform[len(platform) - 1]
             with open("./clientmanifests/" + args.clientname, "r") as f:
-                download_packages(loads(f.read()), platform)
+                exit(0 if download_packages(loads(f.read()), platform) else 1)
         else:
             # try to find the newest manifest we downloaded
             highest = 0
@@ -77,8 +83,8 @@ if __name__ == "__main__":
             platform = basename("./clientmanifests/" + args.clientname).split("_")
             platform = platform[len(platform) - 1]
             with open("./clientmanifests/%s_%s" % (args.clientname, highest), "r") as f:
-                download_packages(loads(f.read()), platform)
+                exit(0 if download_packages(loads(f.read()), platform) else 1)
     elif args.dry_run:
         save_client_manifest(args.clientname)
     else:
-        download_packages(*save_client_manifest(args.clientname))
+        exit(0 if download_packages(*save_client_manifest(args.clientname)) else 1)
