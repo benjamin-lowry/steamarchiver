@@ -198,7 +198,7 @@ def print_manifest_info(depotid, manifestid, depot_files, print_not_exists=True,
                 chunkhex = hexlify(chunk.sha).decode()
                 if not chunkhex in chunks_known:
                     chunks_known.append(chunkhex)
-                if chunkhex or (chunkhex + "_decrypted") in depot_files:
+                if chunkhex in depot_files or (chunkhex + "_decrypted") in depot_files:
                     if not chunkhex in chunks_on_disk:
                         chunks_on_disk.append(chunkhex)
                 else:
