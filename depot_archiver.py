@@ -104,6 +104,11 @@ if __name__ == "__main__":
         print("Saved appinfo for app", args.appid, "changenumber", changenumber)
         # decode appinfo
         appinfo = loads(appinfo_response.buffer[:-1].decode('utf-8', 'replace'))['appinfo']
+    if "public_only" in appinfo.keys():
+        print("WARNING: this app has additional (private) info. The archive "
+                "may not work due to this info being missing. To get this "
+                "info, run get_appinfo.py on this app using an account "
+                "authorized to access it.")
 
     if args.depotid and args.manifestid:
         print("Archiving", appinfo['common']['name'], "depot", args.depotid, "manifest", args.manifestid)
