@@ -1,10 +1,30 @@
 #!/usr/bin/env python3
+from argparse import ArgumentParser
 from os import makedirs, path
+from sys import argv
+
+if __name__ == "__main__": # exit before we import our shit if the args are wrong
+    parser = ArgumentParser(description='Download appinfo from Steam for one or '
+            'more apps (or all of them).\n'
+            "To get appinfo for hidden apps you'll need to log into an account "
+            "that owns them.")
+    parser.add_argument("-i", help="Log into a Steam account interactively.", dest="interactive", action="store_true")
+    parser.add_argument("-u", type=str, help="Username for non-interactive login", dest="username", nargs="?")
+    parser.add_argument("-p", type=str, help="Password for non-interactive login", dest="password", nargs="?")
+    parser.add_argument("-g", type=str, help="Steam Guard code for non-interactive login", dest="code", nargs="?")
+    parser.add_argument('appids', metavar='appid', type=int, nargs='*', help='Apps '
+            'to get appinfo for. If empty, will download appinfo for all '
+            'publicly visible apps on Steam (this will take a while)!')
+    args = parser.parse_args()
+    if args.username and not args.password:
+        print("invalid combination of arguments")
+        exit(1)
+
 from steam.client import SteamClient
 from steam.core.msg import MsgProto
+from steam.enums import EResult
 from steam.enums.emsg import EMsg
 from steam.webapi import WebAPI
-from sys import argv
 
 if __name__ == "__main__":
     # Create directories
@@ -15,14 +35,20 @@ if __name__ == "__main__":
     print("Connecting to the Steam network...")
     steam_client.connect()
     print("Logging in...")
-    steam_client.anonymous_login()
+    if args.interactive:
+        steam_client.cli_login()
+    elif args.username:
+        result = steam_client.login(username=args.username, password=args.password, two_factor_code=args.code, auth_code=args.code)
+        if result != EResult.OK:
+            print("error logging in:", result)
+            exit(1)
+    else:
+        steam_client.anonymous_login()
 
     # Parse arguments
     appids = []
-    if len(argv) > 1:
-        del argv[0]
-        for appid in argv:
-            appids.append(int(appid))
+    if len(args.appids) > 0:
+        appids = args.appids
     else:
         print("Fetching list of apps from WebAPI...")
         for app in WebAPI(None).ISteamApps.GetAppList_v2()['applist']['apps']:
@@ -35,13 +61,25 @@ if __name__ == "__main__":
             print("Latest change:", response.current_change_number)
             f.write(str(response.current_change_number))
 
+    # Get app access tokens
+    print("Getting app access tokens...")
+    tokens = steam_client.get_access_tokens(app_ids=appids)
+    token_count = 0
+    for app, token in tokens['apps'].items():
+        if token != 0:
+            token_count += 1
+    single = (token_count == 1)
+    print("Got", "token" if single else "tokens", "for", token_count, "app" if single else "apps")
 
     # Fetch appinfo in groups of 30 (the maximum number of apps PICS will give
     # us in one message)
     for group in [appids[i:i + 30] for i in range(0, len(appids), 30)]:
         msg = MsgProto(EMsg.ClientPICSProductInfoRequest)
         for app in group:
-            msg.body.apps.add().appid = app
+            msg_app = msg.body.apps.add()
+            msg_app.appid = app
+            if app in tokens['apps']:
+                msg_app.access_token = tokens['apps'][app]
         print("Asking Steam PICS for appinfo for %s %s..." % (len(msg.body.apps),
             "app" if len(msg.body.apps) == 1 else "apps"))
         while True:
@@ -56,8 +94,7 @@ if __name__ == "__main__":
             # Write vdf appinfo to disk
             appinfo_path = "./appinfo/%s_%s.vdf" % (appinfo_response.appid,
                     appinfo_response.change_number)
-            if not path.exists(appinfo_path):
-                with open(appinfo_path, "wb") as f:
-                    f.write(appinfo_response.buffer[:-1])
-                    print("Saved appinfo for app", appinfo_response.appid,
-                            "changenumber", appinfo_response.change_number)
+            with open(appinfo_path, "wb") as f:
+                f.write(appinfo_response.buffer[:-1])
+                print("Saved appinfo for app", appinfo_response.appid,
+                        "changenumber", appinfo_response.change_number)
