@@ -80,13 +80,16 @@ if __name__ == "__main__":
     changenumber = appinfo_response.change_number
     # Write vdf appinfo to disk
     appinfo_path = "./appinfo/%s_%s.vdf" % (args.appid, changenumber)
-    if not path.exists(appinfo_path):
+    if path.exists(appinfo_path):
+        with open(appinfo_path, "r", encoding="utf-8") as f:
+            appinfo = loads(f.read())['appinfo']
+        print("Loaded appinfo from", appinfo_path)
+    else:
         with open(appinfo_path, "wb") as f:
             f.write(appinfo_response.buffer[:-1])
-            print("Saved appinfo for app", args.appid, "changenumber", changenumber)
-
-    # decode appinfo
-    appinfo = loads(appinfo_response.buffer[:-1].decode('utf-8', 'replace'))['appinfo']
+        print("Saved appinfo for app", args.appid, "changenumber", changenumber)
+        # decode appinfo
+        appinfo = loads(appinfo_response.buffer[:-1].decode('utf-8', 'replace'))['appinfo']
 
     if args.depotid and args.manifestid:
         print("Archiving", appinfo['common']['name'], "depot", args.depotid, "manifest", args.manifestid)
