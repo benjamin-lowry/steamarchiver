@@ -119,5 +119,8 @@ if __name__ == "__main__":
         archive_manifest(try_load_manifest(args.appid, args.depotid, manifest), c, args.dry_run)
     else:
         print("Archiving all latest depots for", appinfo['common']['name'], "build", appinfo['depots']['branches']['public']['buildid'])
-        for manifest in c.get_manifests(args.appid, decrypt=False):
-            archive_manifest(manifest, c, args.dry_run)
+        for depot in appinfo["depots"]:
+            depotinfo = appinfo["depots"][depot]
+            if not "manifests" in depotinfo:
+                continue
+            archive_manifest(try_load_manifest(args.appid, depot, depotinfo["manifests"]["public"]), c, args.dry_run)
