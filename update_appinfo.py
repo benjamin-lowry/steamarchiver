@@ -1,10 +1,23 @@
 #!/usr/bin/env python3
+from argparse import ArgumentParser
 from os import makedirs, listdir, path
+
+if __name__ == "__main__": # exit before we import our shit if the args are wrong
+    parser = ArgumentParser(description='Download appinfo changes since the last time we downloaded any appinfo.')
+    parser.add_argument("-i", help="Log into a Steam account interactively.", dest="interactive", action="store_true")
+    parser.add_argument("-u", type=str, help="Username for non-interactive login", dest="username", nargs="?")
+    parser.add_argument("-p", type=str, help="Password for non-interactive login", dest="password", nargs="?")
+    parser.add_argument("-g", type=str, help="Steam Guard code for non-interactive login", dest="code", nargs="?")
+    args = parser.parse_args()
+    if args.username and not args.password:
+        print("invalid combination of arguments")
+        exit(1)
+
 from steam.client import SteamClient
 from steam.core.msg import MsgProto
+from steam.enums import EResult
 from steam.enums.emsg import EMsg
 from steam.webapi import WebAPI
-from sys import argv
 
 if __name__ == "__main__":
     # Create directories
@@ -15,7 +28,15 @@ if __name__ == "__main__":
     print("Connecting to the Steam network...")
     steam_client.connect()
     print("Logging in...")
-    steam_client.anonymous_login()
+    if args.interactive:
+        steam_client.cli_login()
+    elif args.username:
+        result = steam_client.login(username=args.username, password=args.password, two_factor_code=args.code, auth_code=args.code)
+        if result != EResult.OK:
+            print("error logging in:", result)
+            exit(1)
+    else:
+        steam_client.anonymous_login()
 
     highest_changenumber = 0
     if path.exists("./last_change.txt"):
@@ -41,8 +62,29 @@ if __name__ == "__main__":
     print("Latest change:", response.current_change_number)
     with open("./last_change.txt", "w") as f:
         f.write(str(response.current_change_number))
+    if response.current_change_number == highest_changenumber:
+        exit(0) # we already got this change, skip the rest of the script
+    needed_tokens = []
     for change in response.app_changes:
-        if not change.needs_token:
+        if change.needs_token:
+            needed_tokens.append(change.appid)
+    tokens = steam_client.get_access_tokens(app_ids=needed_tokens)
+    token_count = 0
+    for app, token in tokens['apps'].items():
+        if token != 0:
+            token_count += 1
+    single = (token_count == 1)
+    print("Got", "token" if single else "tokens", "for", token_count, "app" if single else "apps")
+    for change in response.app_changes:
+        if change.needs_token:
+            if change.appid in tokens['apps'].keys() and tokens['apps'][change.appid] != 0:
+                print("using token for app", app)
+                app = msg.body.apps.add()
+                app.appid = change.appid
+                app.access_token = tokens['apps'][change.appid]
+            else:
+                print("skipping app", change.appid, "(missing token)")
+        else:
             msg.body.apps.add().appid = change.appid
     for appinfo_response in steam_client.wait_event(steam_client.send_job(msg),
             15)[0].body.apps:
