@@ -2,7 +2,7 @@
 from argparse import ArgumentParser
 from binascii import hexlify
 from datetime import datetime
-from os import makedirs, path
+from os import makedirs, path, listdir
 from sys import argv
 
 if __name__ == "__main__": # exit before we import our shit if the args are wrong
@@ -11,6 +11,7 @@ if __name__ == "__main__": # exit before we import our shit if the args are wron
     parser.add_argument("depotid", type=int, nargs='?', help="Depot ID to download.")
     parser.add_argument("manifestid", type=int, nargs='?', help="Manifest ID to download.")
     parser.add_argument("-d", help="Dry run: download manifest (file metadata) without actually downloading files", dest="dry_run", action="store_true")
+    parser.add_argument("-l", help="Use latest local appinfo instead of trying to download", dest="local_appinfo", action="store_true")
     args = parser.parse_args()
 
 from steam.client import SteamClient
@@ -73,13 +74,26 @@ if __name__ == "__main__":
     c = CDNClient(steam_client)
 
     # Fetch appinfo
-    print("Fetching appinfo for", args.appid)
-    msg = MsgProto(EMsg.ClientPICSProductInfoRequest)
-    msg.body.apps.add().appid = args.appid
-    appinfo_response = steam_client.wait_event(steam_client.send_job(msg))[0].body.apps[0]
-    changenumber = appinfo_response.change_number
-    # Write vdf appinfo to disk
-    appinfo_path = "./appinfo/%s_%s.vdf" % (args.appid, changenumber)
+    if args.local_appinfo:
+        highest_changenumber = 0
+        for file in listdir("./appinfo/"):
+            if not file.endswith(".vdf"): continue
+            if not file.startswith(str(args.appid) + "_"): continue
+            changenumber = int(file.split("_")[1].replace(".vdf", ""))
+            if changenumber > highest_changenumber:
+                highest_changenumber = changenumber
+        if highest_changenumber == 0:
+            print("error: -l flag specified, but no local appinfo exists for app", args.appid)
+            exit(1)
+        appinfo_path = "./appinfo/%s_%s.vdf" % (args.appid, highest_changenumber)
+    else:
+        print("Fetching appinfo for", args.appid)
+        msg = MsgProto(EMsg.ClientPICSProductInfoRequest)
+        msg.body.apps.add().appid = args.appid
+        appinfo_response = steam_client.wait_event(steam_client.send_job(msg))[0].body.apps[0]
+        changenumber = appinfo_response.change_number
+        # Write vdf appinfo to disk
+        appinfo_path = "./appinfo/%s_%s.vdf" % (args.appid, changenumber)
     if path.exists(appinfo_path):
         with open(appinfo_path, "r", encoding="utf-8") as f:
             appinfo = loads(f.read())['appinfo']
