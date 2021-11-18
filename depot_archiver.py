@@ -26,9 +26,6 @@ def archive_manifest(manifest, c, dry_run=False):
     print("Archiving", manifest.depot_id, "(%s)" % (name), "gid", manifest.gid, "from", datetime.fromtimestamp(manifest.creation_time))
     dest = "./depots/" + str(manifest.depot_id) + "/"
     makedirs(dest, exist_ok=True)
-    print("Saving manifest...") # write manifest to disk. this will be a standard Zip with protobuf data inside
-    with open(dest + str(manifest.gid) + ".zip", "wb") as f:
-        f.write(manifest.serialize())
     if dry_run:
         print("Not downloading chunks (dry run)")
         return
@@ -52,6 +49,7 @@ def archive_manifest(manifest, c, dry_run=False):
 
 def try_load_manifest(appid, depotid, manifestid):
     dest = "./depots/%s/%s.zip" % (depotid, manifestid)
+    makedirs("./depots/%s" % depotid, exist_ok=True)
     if path.exists(dest):
         with open(dest, "rb") as f:
             manifest = CDNDepotManifest(c, appid, f.read())
@@ -59,6 +57,9 @@ def try_load_manifest(appid, depotid, manifestid):
     else:
         manifest = c.get_manifest(appid, depotid, manifestid, decrypt=False)
         print("Downloaded manifest %s" % manifestid)
+        print("Saving manifest...") # write manifest to disk. this will be a standard Zip with protobuf data inside
+        with open(dest, "wb") as f:
+            f.write(manifest.serialize())
     return manifest
 
 if __name__ == "__main__":
