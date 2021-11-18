@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 from argparse import ArgumentParser
+from asyncio import run, gather, sleep
 from binascii import hexlify
 from datetime import datetime
+from math import ceil
 from os import makedirs, path, listdir
 from sys import argv
 
@@ -12,7 +14,11 @@ if __name__ == "__main__": # exit before we import our shit if the args are wron
     parser.add_argument("manifestid", type=int, nargs='?', help="Manifest ID to download.")
     parser.add_argument("-d", help="Dry run: download manifest (file metadata) without actually downloading files", dest="dry_run", action="store_true")
     parser.add_argument("-l", help="Use latest local appinfo instead of trying to download", dest="local_appinfo", action="store_true")
+    parser.add_argument("-c", type=int, help="Number of concurrent downloads to perform at once, default 10", dest="connection_limit", default=10)
     args = parser.parse_args()
+    if args.connection_limit < 1:
+        print("connection limit must be at least 1")
+        exit(1)
 
 from steam.client import SteamClient
 from steam.client.cdn import CDNClient, CDNDepotManifest
@@ -20,6 +26,7 @@ from steam.core.msg import MsgProto
 from steam.enums.emsg import EMsg
 from steam.protobufs.content_manifest_pb2 import ContentManifestPayload
 from vdf import loads
+from aiohttp import ClientSession
 
 def archive_manifest(manifest, c, dry_run=False):
     name = manifest.name if manifest.name else "unknown"
@@ -34,18 +41,70 @@ def archive_manifest(manifest, c, dry_run=False):
         for chunk in file.chunks:
             known_chunks.append(chunk.sha)
     print("Beginning to download", len(known_chunks), "encrypted chunks")
-    chunks_dled, chunks_skipped = 0, 0
-    for index, chunk in enumerate(known_chunks):
-        chunk_str = hexlify(chunk).decode()
-        if path.exists(dest + chunk_str):
-            chunks_skipped += 1
-            continue
-        with open(dest + chunk_str, "wb") as f:
-            f.write(c.cdn_cmd("depot", "%s/chunk/%s" % (manifest.depot_id, chunk_str)).content)
-            chunks_dled += 1
-        print("\rFinished download of chunk", chunk_str, "(%s/%s)" % (index + 1, len(known_chunks)),end="")
-    print("\nFinished downloading", manifest.depot_id, "(%s)" % (manifest.name), "gid", manifest.gid, "from", datetime.fromtimestamp(manifest.creation_time))
-    print("Downloaded %s chunks and skipped %s" % (chunks_dled, chunks_skipped))
+    class download_state():
+        def __init__(self):
+            self.chunks_dled = 0
+            self.chunks_skipped = 0
+            self.bytes = 0
+    download_state = download_state()
+    async def dl_worker(chunks, download_state, servers):
+        server = servers[0]
+        async with ClientSession() as session:
+            for chunk in chunks:
+                chunk_str = hexlify(chunk).decode()
+                if path.exists(dest + chunk_str):
+                    download_state.chunks_skipped += 1
+                    continue
+                with open(dest + chunk_str, "wb") as f:
+                    while True:
+                        async with session.get("%s://%s:%s/depot/%s/chunk/%s" % ("https" if server.https else "http",
+                                server.host,
+                                server.port,
+                                manifest.depot_id,
+                                chunk_str)) as response:
+                            if response.ok:
+                                download_state.bytes += response.content_length
+                                f.write(await response.content.read())
+                                break
+                            elif 400 <= response.status < 500:
+                                print(f"error: received status code {response.status} (on chunk {chunk_str}, server {server.host})")
+                                exit(1)
+                            else:
+                                servers.rotate(-1)
+                                server = servers[0]
+                                sleep(0.5)
+                download_state.chunks_dled += 1
+    async def summary_printer(download_state):
+        averages = []
+        last_msg_length = 0
+        while download_state.chunks_dled + download_state.chunks_skipped != len(known_chunks):
+            averages.append(download_state.bytes)
+            download_state.bytes = 0
+            if len(averages) == 6:
+                del averages[0]
+            speed = 0
+            for average in averages:
+                speed += average
+            speed = round(speed / len(averages) / 1000000, 2)
+            msg = f"\rDownloading at {speed}MB/s ({download_state.chunks_dled + download_state.chunks_skipped}/{len(known_chunks)})"
+            if last_msg_length > len(msg):
+                whitespace = " " * (last_msg_length - len(msg))
+            else:
+                whitespace = ""
+            print(msg + whitespace,end="")
+            last_msg_length = len(msg)
+            await sleep(1)
+
+    async def run_workers(download_state):
+        workers = [summary_printer(download_state)]
+        chunk_size = int(ceil(len(known_chunks)/args.connection_limit))
+        for i in range(args.connection_limit):
+            workers.append(dl_worker(known_chunks[i * chunk_size:i * chunk_size + chunk_size], download_state, c.servers.copy()))
+        await gather(*workers)
+
+    run(run_workers(download_state))
+    print("\nFinished downloading", manifest.depot_id, "(%s)" % (name), "gid", manifest.gid, "from", datetime.fromtimestamp(manifest.creation_time))
+    print("Downloaded %s chunks and skipped %s" % (download_state.chunks_dled, download_state.chunks_skipped))
 
 def try_load_manifest(appid, depotid, manifestid):
     dest = "./depots/%s/%s.zip" % (depotid, manifestid)
