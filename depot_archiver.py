@@ -57,22 +57,24 @@ def archive_manifest(manifest, c, dry_run=False):
                     continue
                 with open(dest + chunk_str, "wb") as f:
                     while True:
-                        async with session.get("%s://%s:%s/depot/%s/chunk/%s" % ("https" if server.https else "http",
-                                server.host,
-                                server.port,
-                                manifest.depot_id,
-                                chunk_str)) as response:
-                            if response.ok:
-                                download_state.bytes += response.content_length
-                                f.write(await response.content.read())
-                                break
-                            elif 400 <= response.status < 500:
-                                print(f"error: received status code {response.status} (on chunk {chunk_str}, server {server.host})")
-                                exit(1)
-                            else:
-                                servers.rotate(-1)
-                                server = servers[0]
-                                sleep(0.5)
+                        try:
+                            async with session.get("%s://%s:%s/depot/%s/chunk/%s" % ("https" if server.https else "http",
+                                    server.host,
+                                    server.port,
+                                    manifest.depot_id,
+                                    chunk_str)) as response:
+                                if response.ok:
+                                    download_state.bytes += response.content_length
+                                    f.write(await response.content.read())
+                                    break
+                                elif 400 <= response.status < 500:
+                                    print(f"error: received status code {response.status} (on chunk {chunk_str}, server {server.host})")
+                                    exit(1)
+                        except Exception as e:
+                            print("rotating to next server:", e)
+                        servers.rotate(-1)
+                        server = servers[0]
+                        await sleep(0.5)
                 download_state.chunks_dled += 1
     async def summary_printer(download_state):
         averages = []
