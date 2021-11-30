@@ -15,6 +15,7 @@ if __name__ == "__main__": # exit before we import our shit if the args are wron
     parser.add_argument("-d", help="Dry run: download manifest (file metadata) without actually downloading files", dest="dry_run", action="store_true")
     parser.add_argument("-l", help="Use latest local appinfo instead of trying to download", dest="local_appinfo", action="store_true")
     parser.add_argument("-c", type=int, help="Number of concurrent downloads to perform at once, default 10", dest="connection_limit", default=10)
+    parser.add_argument("-s", type=str, help="Specify a specific server URL instead of automatically selecting one, e.g. https://steampipe.akamaized.net", nargs='?', dest="server")
     args = parser.parse_args()
     if args.connection_limit < 1:
         print("connection limit must be at least 1")
@@ -28,7 +29,7 @@ from steam.protobufs.content_manifest_pb2 import ContentManifestPayload
 from vdf import loads
 from aiohttp import ClientSession
 
-def archive_manifest(manifest, c, dry_run=False):
+def archive_manifest(manifest, c, dry_run=False, server_override=None):
     name = manifest.name if manifest.name else "unknown"
     print("Archiving", manifest.depot_id, "(%s)" % (name), "gid", manifest.gid, "from", datetime.fromtimestamp(manifest.creation_time))
     dest = "./depots/" + str(manifest.depot_id) + "/"
@@ -58,17 +59,23 @@ def archive_manifest(manifest, c, dry_run=False):
                 with open(dest + chunk_str, "wb") as f:
                     while True:
                         try:
-                            async with session.get("%s://%s:%s/depot/%s/chunk/%s" % ("https" if server.https else "http",
+                            if server_override:
+                                request_url = "%s/depot/%s/chunk/%s" % (server_override, manifest.depot_id, chunk_str)
+                                host = server_override
+                            else:
+                                request_url = "%s://%s:%s/depot/%s/chunk/%s" % ("https" if server.https else "http",
                                     server.host,
                                     server.port,
                                     manifest.depot_id,
-                                    chunk_str)) as response:
+                                    chunk_str)
+                                host = ("https" if server.https else "http") + "://" + server.host
+                            async with session.get(request_url) as response:
                                 if response.ok:
                                     download_state.bytes += response.content_length
                                     f.write(await response.content.read())
                                     break
                                 elif 400 <= response.status < 500:
-                                    print(f"error: received status code {response.status} (on chunk {chunk_str}, server {server.host})")
+                                    print(f"error: received status code {response.status} (on chunk {chunk_str}, server {host})")
                                     exit(1)
                         except Exception as e:
                             print("rotating to next server:", e)
@@ -174,15 +181,15 @@ if __name__ == "__main__":
 
     if args.depotid and args.manifestid:
         print("Archiving", appinfo['common']['name'], "depot", args.depotid, "manifest", args.manifestid)
-        archive_manifest(try_load_manifest(args.appid, args.depotid, args.manifestid), c, args.dry_run)
+        archive_manifest(try_load_manifest(args.appid, args.depotid, args.manifestid), c, args.dry_run, args.server)
     elif args.depotid:
         print("Archiving", appinfo['common']['name'], "depot", args.depotid, "manifest", appinfo['depots'][str(args.depotid)]['manifests']['public'])
         manifest = int(appinfo['depots'][str(args.depotid)]['manifests']['public'])
-        archive_manifest(try_load_manifest(args.appid, args.depotid, manifest), c, args.dry_run)
+        archive_manifest(try_load_manifest(args.appid, args.depotid, manifest), c, args.dry_run, args.server)
     else:
         print("Archiving all latest depots for", appinfo['common']['name'], "build", appinfo['depots']['branches']['public']['buildid'])
         for depot in appinfo["depots"]:
             depotinfo = appinfo["depots"][depot]
             if not "manifests" in depotinfo:
                 continue
-            archive_manifest(try_load_manifest(args.appid, depot, depotinfo["manifests"]["public"]), c, args.dry_run)
+            archive_manifest(try_load_manifest(args.appid, depot, depotinfo["manifests"]["public"]), c, args.dry_run, args.server)
