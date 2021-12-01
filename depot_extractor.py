@@ -16,7 +16,7 @@ if __name__ == "__main__": # exit before we import our shit if the args are wron
     parser = ArgumentParser(description='Extract downloaded depots.')
     parser.add_argument('depotid', type=int)
     parser.add_argument('manifestid', type=int)
-    parser.add_argument('depotkey', type=str)
+    parser.add_argument('depotkey', type=str, nargs='?')
     parser.add_argument('-d', dest="dry_run", help="dry run: verify chunks without extracting", action="store_true")
     args = parser.parse_args()
 
@@ -26,14 +26,19 @@ from steam.core.manifest import DepotManifest
 from steam.core.crypto import symmetric_decrypt
 
 if __name__ == "__main__":
-    args.depotkey = bytes.fromhex(args.depotkey)
     steam_client = SteamClient()
     c = CDNClient(steam_client)
     path = "./depots/%s/" % args.depotid
     manifest = None
     with open(path + "%s.zip" % args.manifestid, "rb") as f:
         manifest = DepotManifest(f.read())
-    manifest.decrypt_filenames(args.depotkey)
+    if args.depotkey:
+        args.depotkey = bytes.fromhex(args.depotkey)
+        if manifest.filenames_encrypted:
+            manifest.decrypt_filenames(args.depotkey)
+    elif manifest.filenames_encrypted:
+            print("ERROR: manifest has encrypted filenames, but no depot key was specified")
+            exit(1)
 
     for file in manifest.iter_files():
         target = "./extract/" + dirname(file.filename)
@@ -60,7 +65,11 @@ if __name__ == "__main__":
                 chunkhex = hexlify(chunk.sha).decode()
                 if exists(path + chunkhex):
                     with open(path + chunkhex, "rb") as chunkfile:
-                        decrypted = symmetric_decrypt(chunkfile.read(), args.depotkey)
+                        if args.depotkey:
+                            decrypted = symmetric_decrypt(chunkfile.read(), args.depotkey)
+                        else:
+                            print("ERROR: chunk %s is encrypted, but no depot key was specified" % chunkhex)
+                            exit(1)
                 elif exists(path + chunkhex + "_decrypted"):
                     with open(path + chunkhex + "_decrypted", "rb") as chunkfile:
                         decrypted = chunkfile.read()
