@@ -18,7 +18,7 @@ def unpack_sis(sku, chunkstore_path, use_key = False):
     # unpack each depot
     for depot in sku["manifests"]:
         key = None
-        if use_key:
+        if use_key and sku["backup"] == "1":
             if path.exists("./depot_keys.txt"):
                 with open("./depot_keys.txt", "r", encoding="utf-8") as f:
                     for line in f.read().split("\n"):
@@ -26,6 +26,8 @@ def unpack_sis(sku, chunkstore_path, use_key = False):
                         if line[0] == depot:
                             key_hex = line[2]
                             key = unhexlify(key_hex)
+            if not key:
+                print("ignoring -e flag (couldn't find key for depot in depot_keys.txt)")
         need_manifests[depot] = sku["manifests"][depot]
         makedirs("./depots/%s" % depot, exist_ok=True)
         for chunkstore in sku["chunkstores"][depot]:
@@ -54,30 +56,17 @@ def unpack_sis(sku, chunkstore_path, use_key = False):
                     print("not a CSM file: " + (target + ".csm"))
                     return False
                 csm = csm[0x14:]
-                for chunk in iter_unpack("<20s Q 8s", csm):
-                    sha = chunk[0]
-                    offset = chunk[1]
+                for sha, offset, _, length in iter_unpack("<20s Q L L", csm):
                     print("extracting chunk %s from offset %s in file %s" % (hexlify(sha).decode(), offset, target + ".csd"))
-
-                    # unfortunately valve don't save the length of each chunk,
-                    # so instead we can just read bytes from the file til we
-                    # find the zip eof magic.  we can assume the eof header
-                    # will always be 0x16 (22) bytes because there will never
-                    # be a zip comment.
-                    csdfile.seek(offset)
-                    while True:
-                        byte = csdfile.read(1)
-                        if byte == b"\x50":
-                            potential_eof = csdfile.tell() - 1
-                            if csdfile.read(3) == b"\x4b\x05\x06":
-                                # found eof
-                                length = potential_eof + 22 - offset
-                                break
                     csdfile.seek(offset)
                     if key:
                         with open("./depots/%s/%s" % (depot, hexlify(sha).decode()), "wb") as f:
                             print("writing %s bytes re-encrypted using key %s and random IV" % (length, key_hex))
                             f.write(symmetric_encrypt(csdfile.read(length), key))
+                    elif sku["backup"] == "0":
+                        with open("./depots/%s/%s" % (depot, hexlify(sha).decode()), "wb") as f:
+                            print("writing %s bytes encrypted" % length)
+                            f.write(csdfile.read(length))
                     else:
                         with open("./depots/%s/%s_decrypted" % (depot, hexlify(sha).decode()), "wb") as f:
                             print("writing %s bytes unencrypted" % length)
