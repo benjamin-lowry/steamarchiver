@@ -85,6 +85,8 @@ if __name__ == "__main__":
                 continue
             if not 'depots' in app_info:
                 continue
+            if not app in app_info['depots']:
+                app_info['depots'][app] = {'name': app_info['common']['name']}
             for depot, info in app_info['depots'].items():
                 try:
                     depot = int(depot)
@@ -93,7 +95,7 @@ if __name__ == "__main__":
                 if depot in keys_saved:
                     print("skipping previously saved key for depot", depot)
                     continue
-                if depot in licensed_depots:
+                if (depot in licensed_depots) or (depot in licensed_apps):
                     try:
                         key = steam_client.get_depot_key(app, depot).depot_encryption_key
                     except AttributeError:
