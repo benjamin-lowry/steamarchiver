@@ -56,7 +56,7 @@ if __name__ == "__main__":
                         continue
                     break
         try:
-            for chunk in file.chunks:
+            for chunk in sorted(file.chunks, key = lambda chunk: chunk.offset):
                 chunkhex = hexlify(chunk.sha).decode()
                 if exists(path + chunkhex):
                     with open(path + chunkhex, "rb") as chunkfile:
