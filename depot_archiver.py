@@ -8,10 +8,12 @@ from os import makedirs, path, listdir
 from sys import argv
 
 if __name__ == "__main__": # exit before we import our shit if the args are wrong
-    parser = ArgumentParser(description='Download Steam content depots for archival.\nSpecify an app to download all the depots for that app, or an app and depot ID to download the latest version of that depot (or a specific version if the manifest ID is specified.)')
-    parser.add_argument("appid", type=int, help="App ID to download depots for.")
+    parser = ArgumentParser(description='Download Steam content depots for archival.\nDownloading apps: Specify an app to download all the depots for that app, or an app and depot ID to download the latest version of that depot (or a specific version if the manifest ID is specified.)\nDownloading workshop items: Use the -w flag to specify the ID of the workshop file to download.')
+    parser.add_argument("appid", type=int, nargs='?', help="App ID to download depots for.")
     parser.add_argument("depotid", type=int, nargs='?', help="Depot ID to download.")
-    parser.add_argument("manifestid", type=int, nargs='?', help="Manifest ID to download.")
+    manifest_group = parser.add_mutually_exclusive_group()
+    manifest_group.add_argument("manifestid", type=int, nargs='?', help="Manifest ID to download.")
+    manifest_group.add_argument("-w", type=int, nargs='?', help="Workshop file ID to download.", dest="workshop_id")
     parser.add_argument("-d", help="Dry run: download manifest (file metadata) without actually downloading files", dest="dry_run", action="store_true")
     parser.add_argument("-l", help="Use latest local appinfo instead of trying to download", dest="local_appinfo", action="store_true")
     parser.add_argument("-c", type=int, help="Number of concurrent downloads to perform at once, default 10", dest="connection_limit", default=10)
@@ -19,11 +21,21 @@ if __name__ == "__main__": # exit before we import our shit if the args are wron
     args = parser.parse_args()
     if args.connection_limit < 1:
         print("connection limit must be at least 1")
+        parser.print_help()
+        exit(1)
+    if not args.appid and not args.workshop_id:
+        print("must specify at least one appid or workshop file id")
+        parser.print_help()
+        exit(1)
+    if args.appid and args.workshop_id:
+        print("must specify only app or workshop item, not both")
+        parser.print_help()
         exit(1)
 
 from steam.client import SteamClient
 from steam.client.cdn import CDNClient, CDNDepotManifest
 from steam.core.msg import MsgProto
+from steam.enums import EResult
 from steam.enums.emsg import EMsg
 from steam.protobufs.content_manifest_pb2 import ContentManifestPayload
 from vdf import loads
@@ -141,6 +153,24 @@ if __name__ == "__main__":
     print("Logging in...")
     steam_client.anonymous_login()
     c = CDNClient(steam_client)
+    if args.workshop_id and not args.appid:
+        response = steam_client.send_um_and_wait("PublishedFile.GetDetails#1", {'publishedfileids':[args.workshop_id]})
+        if response.header.eresult != EResult.OK:
+            print("error: couldn't get workshop item info:", response.header.error_message)
+            exit(1)
+        file = response.body.publishedfiledetails[0]
+        if file.result != EResult.OK:
+            print("error: steam returned error", EResult(file.result))
+            exit(1)
+        print("Retrieved data for workshop item", file.title, "for app", file.consumer_appid, "(%s)" % file.app_name)
+        if not file.hcontent_file:
+            print("error: workshop item is not on SteamPipe")
+            exit(1)
+        if file.file_url:
+            print("error: workshop item is not on SteamPipe: its download URL is", file.file_url)
+            exit(1)
+        archive_manifest(try_load_manifest(file.consumer_appid, file.consumer_appid, file.hcontent_file), c, args.dry_run, args.server)
+        exit(0)
 
     # Fetch appinfo
     if args.local_appinfo:
