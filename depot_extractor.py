@@ -20,14 +20,10 @@ if __name__ == "__main__": # exit before we import our shit if the args are wron
     parser.add_argument('-d', dest="dry_run", help="dry run: verify chunks without extracting", action="store_true")
     args = parser.parse_args()
 
-from steam.client import SteamClient
-from steam.client.cdn import CDNClient
 from steam.core.manifest import DepotManifest
 from steam.core.crypto import symmetric_decrypt
 
 if __name__ == "__main__":
-    steam_client = SteamClient()
-    c = CDNClient(steam_client)
     path = "./depots/%s/" % args.depotid
     manifest = None
     with open(path + "%s.zip" % args.manifestid, "rb") as f:
