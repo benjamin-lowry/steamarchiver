@@ -113,7 +113,7 @@ def print_branches(appinfo):
         if "pwdrequired" in branch_info.keys() and branch_info["pwdrequired"] == "1":
             found_other_branch = False
             for other_branch_name, other_branch_info in appinfo['appinfo']['depots']['branches'].items():
-                if other_branch_name != branch_name and not 'pwdrequired' in other_branch_info.keys() and other_branch_info["buildid"] == branch_info["buildid"]:
+                if other_branch_name != branch_name and not 'pwdrequired' in other_branch_info.keys() and 'buildid' in other_branch_info.keys() and other_branch_info["buildid"] == branch_info["buildid"]:
                     found_other_branch = True
                     print(", even with %s" % other_branch_name, end="")
                     for depot in depot_branch_manifests:
