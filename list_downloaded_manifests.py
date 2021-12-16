@@ -81,6 +81,7 @@ def print_branches(appinfo):
     depot_names = {}
     depot_files = {}
     depots_downloaded = {}
+    depots_in_branch = {}
     if 'depots' not in appinfo['appinfo'].keys():
         print("\t[App contains no depots.]")
         return
@@ -102,6 +103,7 @@ def print_branches(appinfo):
             pass
     for branch_name, branch_info in appinfo['appinfo']['depots']['branches'].items():
         depots_downloaded[branch_name] = 0
+        depots_in_branch[branch_name] = len(depots)
         if 'buildid' not in branch_info.keys():
             print("\tBranch %s: no build" % branch_name)
         elif 'timeupdated' not in branch_info.keys():
@@ -111,7 +113,7 @@ def print_branches(appinfo):
         if "pwdrequired" in branch_info.keys() and branch_info["pwdrequired"] == "1":
             print("\t\t[No manifest information, this branch requires a password.]")
         else:
-            for depot in depots:
+            for index, depot in enumerate(depots):
                 if not depot in depot_files.keys():
                     try:
                         depot_files[depot] = listdir("./depots/%s/" % depot)
@@ -131,11 +133,9 @@ def print_branches(appinfo):
                             print_not_exists=True):
                         depots_downloaded[branch_name] += 1
                 else:
-                    if print_depot_info(depot, depot_files[depot],
-                            name=depot_names[depot],
-                            print_not_exists=True):
-                        depots_downloaded[branch_name] += 1
-            print("\t\tDepots available: %s/%s" % (depots_downloaded[branch_name], len(depots)))
+                    print("\t\t[Depot %s (%s) is not in this branch.]" % (depot, depot_names[depot]))
+                    depots_in_branch[branch_name] -= 1
+            print("\t\tDepots available: %s/%s" % (depots_downloaded[branch_name], depots_in_branch[branch_name]))
     if 'public' in appinfo['appinfo']['depots']['branches'].keys():
         print("\t%s/%s depots for %s are up-to-date with the public branch" % (depots_downloaded["public"], len(depots), appinfo['appinfo']['common']['name']))
 
