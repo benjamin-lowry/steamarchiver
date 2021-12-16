@@ -10,6 +10,7 @@ if __name__ == "__main__": # exit before we import our shit if the args are wron
     parser = ArgumentParser(description='Print information about downloaded depots and manifests.\nSpecify either depots and/or manifests to print information on, or one or more apps to see whether their latest depots are downloaded.\nIf neither is specified, the script will print information on all downloaded depot manifests.')
     parser.add_argument('--all-apps', help="Act as if every appid in the appinfo folder was specified", dest="all_apps", action='store_true')
     parser.add_argument('--duplicate-appinfo', help="When used with --all-apps or -a, print info for old versions of appinfo instead of always using the latest change.", dest="duplicate_appinfo", action="store_true")
+    parser.add_argument('--no-search-chunks', help="Don't verify all the chunks for a depot are downloaded, just verify the manifest itself is downloaded", dest="search_chunks", action="store_false")
     parser.add_argument('-a', type=int, help="Appid to print information about (can be used multiple times).", action='append', metavar="appid", dest="appid")
     parser.add_argument('-d', type=int, help="Depot to print information about (can be used multiple times). "
         "If not present, all downloaded depots will be used.", action='append', metavar="depotid", dest="depotid")
@@ -19,7 +20,7 @@ if __name__ == "__main__": # exit before we import our shit if the args are wron
 
 from steam.core.manifest import DepotManifest
 
-def print_app_info(appid, duplicate_appinfo=False):
+def print_app_info(appid, duplicate_appinfo=False, search_chunks=True):
     changenumbers = []
     for appinfo_file in listdir("./appinfo/"):
         appinfo_file = appinfo_file.split("_")
@@ -42,7 +43,7 @@ def print_app_info(appid, duplicate_appinfo=False):
                 print("App %s change #%s (no name)" % (appid, change))
             else:
                 print("App %s change #%s: %s" % (appid, change, appinfo['appinfo']['common']['name']))
-            print_branches(appinfo)
+            print_branches(appinfo, search_chunks)
     else:
         try:
             highest_changenumber = next(reversed(sorted(changenumbers)))
@@ -61,9 +62,9 @@ def print_app_info(appid, duplicate_appinfo=False):
             print("App %s change #%s (no name)" % (appid, highest_changenumber))
         else:
             print("App %s change #%s: %s" % (appid, highest_changenumber, appinfo['appinfo']['common']['name']))
-        print_branches(appinfo)
+        print_branches(appinfo, search_chunks)
 
-def print_all_app_info(duplicate_appinfo = False):
+def print_all_app_info(duplicate_appinfo = False, search_chunks=True):
     apps = []
     for app in listdir("./appinfo"):
         try:
@@ -73,9 +74,9 @@ def print_all_app_info(duplicate_appinfo = False):
         if app not in apps:
             apps.append(app)
     for app in apps:
-        print_app_info(app, duplicate_appinfo)
+        print_app_info(app, duplicate_appinfo, search_chunks)
 
-def print_branches(appinfo):
+def print_branches(appinfo, search_chunks=True):
     depots = []
     depot_branch_manifests = {}
     depot_names = {}
@@ -134,16 +135,17 @@ def print_branches(appinfo):
                 if print_depot_info(depot, depot_files[depot],
                         name=depot_names[depot],
                         manifests=[depot_branch_manifests[depot][branch_name]],
-                        print_not_exists=True):
+                        print_not_exists=True,
+                        search_chunks=search_chunks):
                     depots_downloaded[branch_name] += 1
             else:
                 print("\t\t[Depot %s (%s) is not in this branch.]" % (depot, depot_names[depot]))
                 depots_in_branch[branch_name] -= 1
         print("\t\tDepots available: %s/%s" % (depots_downloaded[branch_name], depots_in_branch[branch_name]))
-    if 'public' in appinfo['appinfo']['depots']['branches'].keys():
+    if 'public' in appinfo['appinfo']['depots']['branches'].keys() and search_chunks:
         print("\t%s/%s depots for %s are up-to-date with the public branch" % (depots_downloaded["public"], len(depots), appinfo['appinfo']['common']['name']))
 
-def print_depot_info(depotid, depot_files, manifests=None, print_not_exists=True, name=None):
+def print_depot_info(depotid, depot_files, manifests=None, print_not_exists=True, name=None, search_chunks=True):
     path = "./depots/%s/" % depotid
     if not exists(path):
         if name:
@@ -158,7 +160,7 @@ def print_depot_info(depotid, depot_files, manifests=None, print_not_exists=True
     if manifests:
         results = []
         for manifest in manifests:
-            results.append(print_manifest_info(depotid, manifest, depot_files, print_not_exists, name))
+            results.append(print_manifest_info(depotid, manifest, depot_files, print_not_exists, name, search_chunks))
         if all(x for x in results):
             return True
         else:
@@ -168,7 +170,7 @@ def print_depot_info(depotid, depot_files, manifests=None, print_not_exists=True
             results = []
             for file in listdir(path):
                 if file.endswith(".zip"):
-                    results.append(print_manifest_info(depotid, int(file.replace(".zip", "")), depot_files, print_not_exists, name))
+                    results.append(print_manifest_info(depotid, int(file.replace(".zip", "")), depot_files, print_not_exists, name, search_chunks))
             if all(x for x in results):
                 return True
             else:
@@ -180,7 +182,7 @@ def print_depot_info(depotid, depot_files, manifests=None, print_not_exists=True
                 print("\t\tDepot %s not found" % depotid)
             return False
 
-def print_manifest_info(depotid, manifestid, depot_files, print_not_exists=True, name=None):
+def print_manifest_info(depotid, manifestid, depot_files, print_not_exists=True, name=None, search_chunks=True):
     manifests = []
     manifest_zip = "./depots/%s/%s.zip" % (depotid, manifestid)
     chunks_on_disk = 0
@@ -195,34 +197,35 @@ def print_manifest_info(depotid, manifestid, depot_files, print_not_exists=True,
             print("\t\tDepot", manifest.depot_id, "(%s) gid" % name, manifest.gid, "from", datetime.fromtimestamp(manifest.creation_time))
         else:
             print("\t\tDepot", manifest.depot_id, "gid", manifest.gid, "from", datetime.fromtimestamp(manifest.creation_time))
-        chunks_known = []
-        chunks_on_disk = []
-        for file in manifest.payload.mappings:
-            for chunk in file.chunks:
-                chunkhex = hexlify(chunk.sha).decode()
-                if not chunkhex in chunks_known:
-                    chunks_known.append(chunkhex)
-                if chunkhex in depot_files or (chunkhex + "_decrypted") in depot_files:
-                    if not chunkhex in chunks_on_disk:
-                        chunks_on_disk.append(chunkhex)
-                else:
-                    print("\t\t\tchunk", chunkhex, "missing")
-        print("\t\t\tchunks: %s/%s" % (len(chunks_on_disk), len(chunks_known)))
+        if search_chunks:
+            chunks_known = []
+            chunks_on_disk = []
+            for file in manifest.payload.mappings:
+                for chunk in file.chunks:
+                    chunkhex = hexlify(chunk.sha).decode()
+                    if not chunkhex in chunks_known:
+                        chunks_known.append(chunkhex)
+                    if chunkhex in depot_files or (chunkhex + "_decrypted") in depot_files:
+                        if not chunkhex in chunks_on_disk:
+                            chunks_on_disk.append(chunkhex)
+                    else:
+                        print("\t\t\tchunk", chunkhex, "missing")
+            print("\t\t\tchunks: %s/%s" % (len(chunks_on_disk), len(chunks_known)))
     return True
 
 if __name__ == "__main__":
     if args.all_apps:
-        print_all_app_info(args.duplicate_appinfo)
+        print_all_app_info(args.duplicate_appinfo, args.search_chunks)
     elif args.appid:
         if args.depotid or args.manifestid:
             print("error: cannot specify appid and depot/manifestid at the same time")
             parser.print_help()
             exit(1)
         for app in args.appid:
-            print_app_info(app, args.duplicate_appinfo)
+            print_app_info(app, args.duplicate_appinfo, args.search_chunks)
     elif args.depotid:
         for depot in args.depotid:
-            print_depot_info(depot, listdir("./depots/%s/" % depot), args.manifestid)
+            print_depot_info(depot, listdir("./depots/%s/" % depot), args.manifestid, search_chunks=args.search_chunks)
     else:
         for depot in sorted([int(x) for x in listdir("./depots/")]):
-            print_depot_info(depot, listdir("./depots/%s/" % depot), args.manifestid, print_not_exists=False)
+            print_depot_info(depot, listdir("./depots/%s/" % depot), args.manifestid, print_not_exists=False, search_chunks=args.search_chunks)
