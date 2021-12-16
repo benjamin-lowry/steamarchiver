@@ -105,37 +105,41 @@ def print_branches(appinfo):
         depots_downloaded[branch_name] = 0
         depots_in_branch[branch_name] = len(depots)
         if 'buildid' not in branch_info.keys():
-            print("\tBranch %s: no build" % branch_name)
+            print("\tBranch %s: no build" % branch_name, end="")
         elif 'timeupdated' not in branch_info.keys():
-            print("\tBranch %s: build %s, last update unknown" % (branch_name, branch_info['buildid']))
+            print("\tBranch %s: build %s, last update unknown" % (branch_name, branch_info['buildid']), end="")
         else:
-            print("\tBranch %s: build %s, last update %s" % (branch_name, branch_info['buildid'], datetime.fromtimestamp(int(branch_info['timeupdated']))))
+            print("\tBranch %s: build %s, last update %s" % (branch_name, branch_info['buildid'], datetime.fromtimestamp(int(branch_info['timeupdated']))), end="")
         if "pwdrequired" in branch_info.keys() and branch_info["pwdrequired"] == "1":
-            print("\t\t[No manifest information, this branch requires a password.]")
-        else:
-            for index, depot in enumerate(depots):
-                if not depot in depot_files.keys():
-                    try:
-                        depot_files[depot] = listdir("./depots/%s/" % depot)
-                    except FileNotFoundError:
-                        print("\t\t[Missing depot %s (%s).]" % (depot, depot_names[depot]))
-                        continue
-                if branch_name in depot_branch_manifests[depot].keys():
-                    if print_depot_info(depot, depot_files[depot],
-                            name=depot_names[depot],
-                            manifests=[depot_branch_manifests[depot][branch_name]],
-                            print_not_exists=True):
-                        depots_downloaded[branch_name] += 1
-                elif "public" in depot_branch_manifests[depot].keys():
-                    if print_depot_info(depot, depot_files[depot],
-                            name=depot_names[depot],
-                            manifests=[depot_branch_manifests[depot]["public"]],
-                            print_not_exists=True):
-                        depots_downloaded[branch_name] += 1
-                else:
-                    print("\t\t[Depot %s (%s) is not in this branch.]" % (depot, depot_names[depot]))
-                    depots_in_branch[branch_name] -= 1
-            print("\t\tDepots available: %s/%s" % (depots_downloaded[branch_name], depots_in_branch[branch_name]))
+            found_other_branch = False
+            for other_branch_name, other_branch_info in appinfo['appinfo']['depots']['branches'].items():
+                if other_branch_name != branch_name and not 'pwdrequired' in other_branch_info.keys() and other_branch_info["buildid"] == branch_info["buildid"]:
+                    found_other_branch = True
+                    print(", even with %s" % other_branch_name, end="")
+                    for depot in depot_branch_manifests:
+                        if other_branch_name in depot_branch_manifests[depot]:
+                            depot_branch_manifests[depot][branch_name] = depot_branch_manifests[depot][other_branch_name]
+            if not found_other_branch:
+                print("\n\t\t[No manifest information, this branch requires a password.]")
+                continue
+        print()
+        for index, depot in enumerate(depots):
+            if not depot in depot_files.keys():
+                try:
+                    depot_files[depot] = listdir("./depots/%s/" % depot)
+                except FileNotFoundError:
+                    print("\t\t[Missing depot %s (%s).]" % (depot, depot_names[depot]))
+                    continue
+            if branch_name in depot_branch_manifests[depot].keys():
+                if print_depot_info(depot, depot_files[depot],
+                        name=depot_names[depot],
+                        manifests=[depot_branch_manifests[depot][branch_name]],
+                        print_not_exists=True):
+                    depots_downloaded[branch_name] += 1
+            else:
+                print("\t\t[Depot %s (%s) is not in this branch.]" % (depot, depot_names[depot]))
+                depots_in_branch[branch_name] -= 1
+        print("\t\tDepots available: %s/%s" % (depots_downloaded[branch_name], depots_in_branch[branch_name]))
     if 'public' in appinfo['appinfo']['depots']['branches'].keys():
         print("\t%s/%s depots for %s are up-to-date with the public branch" % (depots_downloaded["public"], len(depots), appinfo['appinfo']['common']['name']))
 
