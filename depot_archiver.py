@@ -63,6 +63,10 @@ def archive_manifest(manifest, c, dry_run=False, server_override=None):
     async def dl_worker(chunks, download_state, servers):
         server = servers[0]
         async with ClientSession() as session:
+            for index, chunk in enumerate(chunks):
+                if path.exists(dest + hexlify(chunk).decode()):
+                    download_state.chunks_skipped += 1
+                    del chunks[index]
             for chunk in chunks:
                 chunk_str = hexlify(chunk).decode()
                 if path.exists(dest + chunk_str):
