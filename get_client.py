@@ -3,7 +3,7 @@ import requests as r
 from argparse import ArgumentParser
 from vdf import loads
 from sys import argv
-from os import makedirs, listdir
+from os import makedirs, listdir, symlink
 from os.path import exists, basename
 from hashlib import sha256
 from re import compile
@@ -28,22 +28,34 @@ def download_packages(client_manifest, platform):
     makedirs("./clientpackages", exist_ok=True)
     print("Downloading packages for client version %s" % client_manifest[platform]['version'])
     del client_manifest[platform]['version']
+    packages = {}
     for package_name, package in client_manifest[platform].items():
-        needs_download = True
+        packages[package_name] = package
+        for key, value in package.items():
+            if type(value) == dict and value["file"]:
+                packages[package_name + "_" + key] = value
+    packages_by_sha2 = {}
+    for package_name, package in packages.items():
+        if package['sha2'] in packages_by_sha2.keys():
+            existing_file = packages_by_sha2[package['sha2']]
+            print("Package", package_name, "identical to", existing_file)
+            symlink(existing_file, "./clientpackages/" + package['file'])
+            continue
         if exists("./clientpackages/" + package['file']):
             with open("./clientpackages/" + package['file'], "rb") as f:
                 if (sha256(f.read()).hexdigest()) == package['sha2']:
                     print("Package", package_name, "already up-to-date")
-                    needs_download = False
-        if needs_download:
-                response = r.get(CDN_ROOT + package['file'])
-                if response.ok:
-                    with open("./clientpackages/" + package['file'], "wb") as f:
-                        f.write(response.content)
-                    print("Saved package", package_name)
-                else:
-                    print(f"Unable to download package {package_name}: {response.status_code}")
-                    return False
+                    packages_by_sha2[package['sha2']] = package['file']
+                    continue
+        response = r.get(CDN_ROOT + package['file'])
+        if response.ok:
+            with open("./clientpackages/" + package['file'], "wb") as f:
+                f.write(response.content)
+            print("Saved package", package_name)
+            packages_by_sha2[package['sha2']] = package['file']
+        else:
+            print(f"Unable to download package {package_name}: {response.status_code}")
+            return False
     return True
 
 if __name__ == "__main__":
