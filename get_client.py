@@ -7,6 +7,7 @@ from os import makedirs, listdir, symlink
 from os.path import exists, basename
 from hashlib import sha256
 from re import compile
+from shutil import copy
 
 # TODO: code to load cachedupdatehosts.vdf
 CDN_ROOT = "https://steamcdn-a.akamaihd.net/client/"
@@ -39,7 +40,10 @@ def download_packages(client_manifest, platform):
         if package['sha2'] in packages_by_sha2.keys():
             existing_file = packages_by_sha2[package['sha2']]
             print("Package", package_name, "identical to", existing_file)
-            symlink(existing_file, "./clientpackages/" + package['file'])
+            try:
+                symlink(existing_file, "./clientpackages/" + package['file'])
+            except:
+                copy("./clientpackages/" + existing_file, "./clientpackages/" + package['file'])
             continue
         if exists("./clientpackages/" + package['file']):
             with open("./clientpackages/" + package['file'], "rb") as f:
