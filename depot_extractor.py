@@ -33,8 +33,20 @@ if __name__ == "__main__":
         if manifest.filenames_encrypted:
             manifest.decrypt_filenames(args.depotkey)
     elif manifest.filenames_encrypted:
-            print("ERROR: manifest has encrypted filenames, but no depot key was specified")
-            exit(1)
+            if exists("./depot_keys.txt"):
+                with open("./depot_keys.txt", "r", encoding="utf-8") as f:
+                    for line in f.read().split("\n"):
+                        line = line.split("\t")
+                        if int(line[0]) == args.depotid:
+                            args.depotkey = bytes.fromhex(line[2])
+                            manifest.decrypt_filenames(args.depotkey)
+                            break
+                    if not args.depotkey:
+                        print("ERROR: manifest has encrypted filenames, but no depot key was specified and no key for this depot exists in depot_keys.txt")
+                        exit(1)
+            else:
+                print("ERROR: manifest has encrypted filenames, but no depot key was specified and no depot_keys.txt exists")
+                exit(1)
 
     for file in manifest.iter_files():
         target = "./extract/" + dirname(file.filename)
