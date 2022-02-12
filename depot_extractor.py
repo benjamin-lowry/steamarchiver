@@ -18,6 +18,7 @@ if __name__ == "__main__": # exit before we import our shit if the args are wron
     parser.add_argument('manifestid', type=int)
     parser.add_argument('depotkey', type=str, nargs='?')
     parser.add_argument('-d', dest="dry_run", help="dry run: verify chunks without extracting", action="store_true")
+    parser.add_argument('--dest', help="directory to place extracted files in", type=str, default="extract")
     args = parser.parse_args()
 
 from steam.core.manifest import DepotManifest
@@ -49,7 +50,7 @@ if __name__ == "__main__":
                 exit(1)
 
     for file in manifest.iter_files():
-        target = "./extract/" + dirname(file.filename)
+        target = args.dest + "/" + dirname(file.filename)
         if not args.dry_run:
             try:
                 makedirs(target, exist_ok=True)
@@ -105,7 +106,7 @@ if __name__ == "__main__":
                 if sha.digest() != chunk.sha:
                     print("ERROR: sha1 checksum mismatch (expected %s, got %s)" % (hexlify(chunk.sha).decode(), sha.hexdigest()))
                 if not args.dry_run:
-                    with open("./extract/" + file.filename, "ab") as f:
+                    with open(args.dest + "/" + file.filename, "ab") as f:
                         f.seek(chunk.offset)
                         f.write(decompressed)
         except IsADirectoryError:
