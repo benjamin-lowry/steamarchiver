@@ -20,10 +20,15 @@ def save_client_manifest(name):
     response.raise_for_status()
     keyvalues = loads(response.content.decode())
     manifest_name = name + "_" + keyvalues[platform]["version"]
-    with open("./clientmanifests/" + manifest_name, "wb") as f:
-        f.write(response.content)
-        print("Saved client manifest", manifest_name)
-    return keyvalues, platform
+    target = "./clientmanifests/" + manifest_name
+    previously_existed = exists(target)
+    if previously_existed:
+        print("Manifest", manifest_name, "already downloaded")
+    else:
+        with open(target, "wb") as f:
+            f.write(response.content)
+            print("Saved client manifest", manifest_name)
+    return keyvalues, platform, previously_existed
 
 def download_packages(client_manifest, platform):
     makedirs("./clientpackages", exist_ok=True)
@@ -65,10 +70,11 @@ def download_packages(client_manifest, platform):
 if __name__ == "__main__":
     parser = ArgumentParser(description="Downloads a version of the Steam client from CDN")
     parser.add_argument("clientname", nargs="?", help="name of the client to download (e.g. \"steam_client_win32\")", default="steam_client_win32")
-    parser.add_argument("-d", dest="dry_run", help="dry run: download client manifest but don't download packages", action="store_true")
-    parser.add_argument("-l", dest="local", help="don't download a new manifest, just try to download packages for manifests that have already been downloaded", action="store_true")
+    parser.add_argument("-l", dest="local", help="don't download a new manifest, just try to download packages for manifests that have already been downloaded (cannot be used with -s or -d", action="store_true")
+    parser.add_argument("-s", dest="skip_previous_manifests", help="dry run (skip package download) if the latest manifest was previously downloaded", action="store_true")
+    parser.add_argument("-d", dest="dry_run", help="force dry run (unconditionally skip downloading packages)", action="store_true")
     args = parser.parse_args()
-    if args.dry_run and args.local:
+    if (args.local) and (args.skip_previous_manifests or args.dry_run):
         print("invalid combination of arguments")
         parser.print_help()
         exit(1)
@@ -103,4 +109,8 @@ if __name__ == "__main__":
     elif args.dry_run:
         save_client_manifest(args.clientname)
     else:
-        exit(0 if download_packages(*save_client_manifest(args.clientname)) else 1)
+        keyvalues, platform, previously_existed = save_client_manifest(args.clientname)
+        if args.skip_previous_manifests and previously_existed:
+            exit(0)
+        else:
+            exit(download_packages(keyvalues, platform))
