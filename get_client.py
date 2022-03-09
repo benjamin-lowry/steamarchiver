@@ -105,7 +105,7 @@ if __name__ == "__main__":
             platform = basename("./clientmanifests/" + args.clientname).split("_")
             platform = platform[len(platform) - 1]
             with open("./clientmanifests/%s_%s" % (args.clientname, highest), "r") as f:
-                exit(0 if download_packages(loads(f.read()), platform) else 1)
+                exit(not download_packages(loads(f.read()), platform))
     elif args.dry_run:
         save_client_manifest(args.clientname)
     else:
@@ -113,4 +113,4 @@ if __name__ == "__main__":
         if args.skip_previous_manifests and previously_existed:
             exit(0)
         else:
-            exit(download_packages(keyvalues, platform))
+            exit(not download_packages(keyvalues, platform))
