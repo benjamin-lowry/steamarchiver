@@ -47,8 +47,9 @@ def download_packages(client_manifest, platform):
             print("Package", package_name, "identical to", existing_file)
             try:
                 symlink(existing_file, "./clientpackages/" + package['file'])
-            except:
-                copy("./clientpackages/" + existing_file, "./clientpackages/" + package['file'])
+            except Exception as e:
+                if type(e) != FileExistsError:
+                    copy("./clientpackages/" + existing_file, "./clientpackages/" + package['file'])
             continue
         if exists("./clientpackages/" + package['file']):
             with open("./clientpackages/" + package['file'], "rb") as f:
