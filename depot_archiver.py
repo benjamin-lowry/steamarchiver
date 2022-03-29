@@ -41,8 +41,7 @@ from steam.protobufs.content_manifest_pb2 import ContentManifestPayload
 from vdf import loads
 from aiohttp import ClientSession
 
-def archive_manifest(manifest, c, dry_run=False, server_override=None):
-    name = manifest.name if manifest.name else "unknown"
+def archive_manifest(manifest, c, name="unknown", dry_run=False, server_override=None):
     print("Archiving", manifest.depot_id, "(%s)" % (name), "gid", manifest.gid, "from", datetime.fromtimestamp(manifest.creation_time))
     dest = "./depots/" + str(manifest.depot_id) + "/"
     makedirs(dest, exist_ok=True)
@@ -213,17 +212,19 @@ if __name__ == "__main__":
                 "info, run get_appinfo.py on this app using an account "
                 "authorized to access it.")
 
-    if args.depotid and args.manifestid:
-        print("Archiving", appinfo['common']['name'], "depot", args.depotid, "manifest", args.manifestid)
-        archive_manifest(try_load_manifest(args.appid, args.depotid, args.manifestid), c, args.dry_run, args.server)
-    elif args.depotid:
-        print("Archiving", appinfo['common']['name'], "depot", args.depotid, "manifest", appinfo['depots'][str(args.depotid)]['manifests']['public'])
-        manifest = int(appinfo['depots'][str(args.depotid)]['manifests']['public'])
-        archive_manifest(try_load_manifest(args.appid, args.depotid, manifest), c, args.dry_run, args.server)
+    if args.depotid:
+        name = appinfo['depots'][str(args.depotid)]['name'] if 'name' in appinfo['depots'][str(args.depotid)] else 'unknown'
+        if args.manifestid:
+            print("Archiving", appinfo['common']['name'], "depot", args.depotid, "manifest", args.manifestid)
+            archive_manifest(try_load_manifest(args.appid, args.depotid, args.manifestid), c, name, args.dry_run, args.server)
+        else:
+            print("Archiving", appinfo['common']['name'], "depot", args.depotid, "manifest", appinfo['depots'][str(args.depotid)]['manifests']['public'])
+            manifest = int(appinfo['depots'][str(args.depotid)]['manifests']['public'])
+            archive_manifest(try_load_manifest(args.appid, args.depotid, manifest), c, name, args.dry_run, args.server)
     else:
         print("Archiving all latest depots for", appinfo['common']['name'], "build", appinfo['depots']['branches']['public']['buildid'])
         for depot in appinfo["depots"]:
             depotinfo = appinfo["depots"][depot]
             if not "manifests" in depotinfo:
                 continue
-            archive_manifest(try_load_manifest(args.appid, depot, depotinfo["manifests"]["public"]), c, args.dry_run, args.server)
+            archive_manifest(try_load_manifest(args.appid, depot, depotinfo["manifests"]["public"]), c, depotinfo["name"] if "name" in depotinfo else "unknown", args.dry_run, args.server)
