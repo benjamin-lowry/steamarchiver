@@ -7,7 +7,7 @@ from steam.core.manifest import DepotManifest
 from sys import stderr
 
 if __name__ == "__main__":
-    parser = ArgumentParser(description='Generates a diff (comparison of changes) of two versions (manifests) of a Steam depots.')
+    parser = ArgumentParser(description='Generates a diff (comparison of changes) of two versions (manifests) of a Steam depot.')
     parser.add_argument("depotid", type=int, help="Depot ID to diff.")
     parser.add_argument("old", type=int, help="Old manifest to compare.")
     parser.add_argument("new", type=int, help="New manifest to compare.")
