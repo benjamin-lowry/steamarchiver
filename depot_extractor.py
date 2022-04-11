@@ -2,6 +2,7 @@
 from argparse import ArgumentParser
 from binascii import hexlify
 from datetime import datetime
+from fnmatch import fnmatch
 from hashlib import sha1
 from io import BytesIO
 from os import makedirs, remove
@@ -18,6 +19,7 @@ if __name__ == "__main__": # exit before we import our shit if the args are wron
     parser.add_argument('manifestid', type=int)
     parser.add_argument('depotkey', type=str, nargs='?')
     parser.add_argument('-d', dest="dry_run", help="dry run: verify chunks without extracting", action="store_true")
+    parser.add_argument('-f', dest="files", help="List files to extract (can be used multiple times); if ommitted, all files will be extracted. Glob matching supported.", action="append")
     parser.add_argument('--dest', help="directory to place extracted files in", type=str, default="extract")
     args = parser.parse_args()
 
@@ -49,7 +51,13 @@ if __name__ == "__main__":
                 print("ERROR: manifest has encrypted filenames, but no depot key was specified and no depot_keys.txt exists")
                 exit(1)
 
+    def is_match(file):
+        for pattern in args.files:
+            if fnmatch(file.filename, pattern): return True
+        return False
+
     for file in manifest.iter_files():
+        if args.files and not is_match(file): continue
         target = args.dest + "/" + dirname(file.filename)
         if not args.dry_run:
             try:
