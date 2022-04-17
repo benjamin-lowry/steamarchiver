@@ -16,6 +16,7 @@ def unpack_chunkstore(target, key=None, key_hex=None):
             print("not a CSM file: " + (target + ".csm"))
             return False
         depot = int.from_bytes(csm[0xc:0x10], byteorder='little', signed=False)
+        makedirs("./depots/%s" % depot, exist_ok=True)
         if key == True:
             key, key_hex = find_key(depot)
         is_encrypted = (csm[0x8:0xa] == b'\x03\x00')
@@ -60,7 +61,6 @@ def unpack_sis(sku, chunkstore_path, use_key = False):
             key, key_hex = find_key(depot)
             breakpoint()
         need_manifests[depot] = sku["manifests"][depot]
-        makedirs("./depots/%s" % depot, exist_ok=True)
         for chunkstore in sku["chunkstores"][depot]:
             print("unpacking chunkstore %s" % chunkstore)
             target = chunkstore_path + "/%s_depotcache_%s" % (depot, chunkstore)
