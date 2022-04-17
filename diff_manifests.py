@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 from argparse import ArgumentParser
-from binascii import unhexlify
+from binascii import unhexlify, hexlify
 from datetime import datetime
 from os.path import exists
 from steam.core.manifest import DepotManifest
@@ -12,6 +12,7 @@ if __name__ == "__main__":
     parser.add_argument("old", type=int, help="Old manifest to compare.")
     parser.add_argument("new", type=int, help="New manifest to compare.")
     parser.add_argument("-q", action="store_true", help="quiet: only output errors and names of added or modified files", dest="quiet")
+    parser.add_argument("-d", action="store_true", help="detailed: print the sha1 checksums of added/removed chunks", dest="detailed")
     args = parser.parse_args()
     oldpath = f"./depots/{args.depotid}/{args.old}.zip"
     newpath = f"./depots/{args.depotid}/{args.new}.zip"
@@ -64,6 +65,7 @@ if __name__ == "__main__":
                     num_new_chunks += 1
                     size_new_chunks += chunk.cb_original
                     chunks_found.append(chunk.sha)
+                    if args.detailed: print("added chunk", hexlify(chunk.sha).decode())
                     new_size_original += chunk.cb_original
                     new_size_compressed += chunk.cb_compressed
             else:
@@ -96,6 +98,7 @@ if __name__ == "__main__":
         print("End list of changed files.")
         for _, chunk in old_chunks.items():
             num_deleted_chunks += 1
+            if args.detailed: print("deleted chunk", hexlify(chunk.sha).decode())
             size_deleted_chunks += chunk.cb_original
         size_diff_original = new_size_original - old_size_original
         size_diff_compressed = new_size_compressed - old_size_compressed
