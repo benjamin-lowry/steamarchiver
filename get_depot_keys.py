@@ -79,7 +79,7 @@ if __name__ == "__main__":
                 except ValueError:
                     continue
         print("%s keys already saved in depot_keys.txt" % len(keys_saved))
-    with open("./depot_keys.txt", "a", encoding="utf-8") as f:
+    with open("./depot_keys.txt", "a", encoding="utf-8", newline="\n") as f:
         for app, app_info in app_dict.items():
             if not app in licensed_apps:
                 continue
