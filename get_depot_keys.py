@@ -105,5 +105,9 @@ if __name__ == "__main__":
                         keys_saved.append(depot)
                         if key != b'':
                             key_hex = hexlify(key).decode()
-                            f.write("%s\t\t%s\t%s" % (depot, key_hex, info['name']) + "\n")
-                            print("%s\t\t%s\t%s" % (depot, key_hex, info['name']))
+                            if 'name' in info.keys():
+                                f.write("%s\t\t%s\t%s" % (depot, key_hex, info['name']) + "\n")
+                                print("%s\t\t%s\t%s" % (depot, key_hex, info['name']))
+                            else:
+                                f.write("%s\t\t%s" % (depot, key_hex) + "\n")
+                                print("%s\t\t%s" % (depot, key_hex))
