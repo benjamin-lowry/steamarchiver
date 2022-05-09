@@ -7,6 +7,7 @@ if __name__ == "__main__": # exit before we import our shit if the args are wron
     parser = ArgumentParser(description='Download appinfo changes since the last time we downloaded any appinfo.')
     parser.add_argument("-i", help="Log into a Steam account interactively.", dest="interactive", action="store_true")
     parser.add_argument("-d", help="daemon mode: keep running in the background", dest="daemon", action="store_true")
+    parser.add_argument("-n", help="no skip: always download appinfo, even if token is missing", dest="no_skip", action="store_true")
     parser.add_argument("-t", type=int, help="Number of seconds to sleep between requests in daemon mode (default 5)", dest="time", default=5)
     parser.add_argument("-u", type=str, help="Username for non-interactive login", dest="username", nargs="?")
     parser.add_argument("-p", type=str, help="Password for non-interactive login", dest="password", nargs="?")
@@ -84,6 +85,10 @@ if __name__ == "__main__":
                         app = msg.body.apps.add()
                         app.appid = change.appid
                         app.access_token = tokens['apps'][change.appid]
+                    elif args.no_skip:
+                        print("trying to download public_only appinfo for app", change.appid)
+                        app = msg.body.apps.add()
+                        app.appid = change.appid
                     else:
                         print("skipping app", change.appid, "(missing token)")
                 else:
