@@ -65,9 +65,10 @@ if __name__ == "__main__":
     print("Getting app access tokens...")
     tokens = steam_client.get_access_tokens(app_ids=appids)
     token_count = 0
-    for app, token in tokens['apps'].items():
-        if token != 0:
-            token_count += 1
+    if tokens and 'apps' in tokens.items():
+        for app, token in tokens['apps'].items():
+            if token != 0:
+                token_count += 1
     single = (token_count == 1)
     print("Got", "token" if single else "tokens", "for", token_count, "app" if single else "apps")
 
