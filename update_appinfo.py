@@ -81,7 +81,7 @@ if __name__ == "__main__":
             for change in response.app_changes:
                 if change.needs_token:
                     if change.appid in tokens['apps'].keys() and tokens['apps'][change.appid] != 0:
-                        print("using token for app", app)
+                        print("using token for app", change.appid)
                         app = msg.body.apps.add()
                         app.appid = change.appid
                         app.access_token = tokens['apps'][change.appid]
