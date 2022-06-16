@@ -95,7 +95,7 @@ def print_branches(appinfo, search_chunks=True):
             depots.append(depot)
         except ValueError:
             continue
-        depot_names[depot] = depot_info['name']
+        depot_names[depot] = depot_info['name'] if 'name' in depot_info.keys() else None
         depot_branch_manifests[depot] = {}
         try:
             for branch, manifest in depot_info['manifests'].items():
@@ -129,7 +129,7 @@ def print_branches(appinfo, search_chunks=True):
                 try:
                     depot_files[depot] = listdir("./depots/%s/" % depot)
                 except FileNotFoundError:
-                    print("\t\t[Missing depot %s (%s).]" % (depot, depot_names[depot]))
+                    print("\t\t[Missing depot " + str(depot) + ("(%s).]" % (depot_names[depot]) if depot_names[depot] else ".]"))
                     continue
             if branch_name in depot_branch_manifests[depot].keys():
                 if print_depot_info(depot, depot_files[depot],
@@ -139,7 +139,10 @@ def print_branches(appinfo, search_chunks=True):
                         search_chunks=search_chunks):
                     depots_downloaded[branch_name] += 1
             else:
-                print("\t\t[Depot %s (%s) is not in this branch.]" % (depot, depot_names[depot]))
+                if depot_names[depot]:
+                    print("\t\t[Depot %s (%s) is not in this branch.]" % (depot, depot_names[depot]))
+                else:
+                    print("\t\t[Depot %s is not in this branch.]" % (depot))
                 depots_in_branch[branch_name] -= 1
         print("\t\tDepots available: %s/%s" % (depots_downloaded[branch_name], depots_in_branch[branch_name]))
     if 'public' in appinfo['appinfo']['depots']['branches'].keys() and search_chunks:
