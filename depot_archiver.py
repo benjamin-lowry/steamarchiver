@@ -52,7 +52,7 @@ def archive_manifest(manifest, c, name="unknown", dry_run=False, server_override
     for file in manifest.payload.mappings:
         for chunk in file.chunks:
             known_chunks.append(chunk.sha)
-    print("Beginning to download", len(known_chunks), "encrypted chunks")
+    print("Beginning to download", len(known_chunks), "encrypted", "chunk" if len(known_chunks) == 1 else "chunks")
     class download_state():
         def __init__(self):
             self.chunks_dled = 0
@@ -128,7 +128,7 @@ def archive_manifest(manifest, c, name="unknown", dry_run=False, server_override
 
     run(run_workers(download_state))
     print("\nFinished downloading", manifest.depot_id, "(%s)" % (name), "gid", manifest.gid, "from", datetime.fromtimestamp(manifest.creation_time))
-    print("Downloaded %s chunks and skipped %s" % (download_state.chunks_dled, download_state.chunks_skipped))
+    print("Downloaded %s %s and skipped %s" % (download_state.chunks_dled, "chunk" if download_state.chunks_dled == 1 else "chunks", download_state.chunks_skipped))
 
 def try_load_manifest(appid, depotid, manifestid):
     dest = "./depots/%s/%s.zip" % (depotid, manifestid)
