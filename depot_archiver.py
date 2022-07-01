@@ -18,6 +18,10 @@ if __name__ == "__main__": # exit before we import our shit if the args are wron
     parser.add_argument("-l", help="Use latest local appinfo instead of trying to download", dest="local_appinfo", action="store_true")
     parser.add_argument("-c", type=int, help="Number of concurrent downloads to perform at once, default 10", dest="connection_limit", default=10)
     parser.add_argument("-s", type=str, help="Specify a specific server URL instead of automatically selecting one, e.g. https://steampipe.akamaized.net", nargs='?', dest="server")
+    parser.add_argument("-i", help="Log into a Steam account interactively.", dest="interactive", action="store_true")
+    parser.add_argument("-u", type=str, help="Username for non-interactive login", dest="username", nargs="?")
+    parser.add_argument("-p", type=str, help="Password for non-interactive login", dest="password", nargs="?")
+    parser.add_argument("-g", type=str, help="Steam Guard code for non-interactive login", dest="code", nargs="?")
     args = parser.parse_args()
     if args.connection_limit < 1:
         print("connection limit must be at least 1")
@@ -138,7 +142,7 @@ def try_load_manifest(appid, depotid, manifestid):
             manifest = CDNDepotManifest(c, appid, f.read())
             print("Loaded cached manifest %s from disk" % manifestid)
     else:
-        manifest = c.get_manifest(appid, depotid, manifestid, decrypt=False)
+        manifest = c.get_manifest(appid, depotid, manifestid, decrypt=False, manifest_request_code=c.get_manifest_request_code(appid, depotid, manifestid))
         print("Downloaded manifest %s" % manifestid)
         print("Saving manifest...") # write manifest to disk. this will be a standard Zip with protobuf data inside
         with open(dest, "wb") as f:
@@ -154,7 +158,15 @@ if __name__ == "__main__":
     print("Connecting to the Steam network...")
     steam_client.connect()
     print("Logging in...")
-    steam_client.anonymous_login()
+    if args.interactive:
+        steam_client.cli_login()
+    elif args.username:
+        result = steam_client.login(username=args.username, password=args.password, two_factor_code=args.code, auth_code=args.code)
+        if result != EResult.OK:
+            print("error logging in:", result)
+            exit(1)
+    else:
+        steam_client.anonymous_login()
     c = CDNClient(steam_client)
     if args.workshop_id and not args.appid:
         response = steam_client.send_um_and_wait("PublishedFile.GetDetails#1", {'publishedfileids':[args.workshop_id]})
