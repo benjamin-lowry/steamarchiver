@@ -103,8 +103,8 @@ if __name__ == "__main__":
         size_diff_original = new_size_original - old_size_original
         size_diff_compressed = new_size_compressed - old_size_compressed
         print("Download size stats:")
-        print(f"Old version totals {format_bytes(old_size_original)} uncompressed, {format_bytes(old_size_compressed)} compressed ({round(old_size_compressed/old_size_original*100, 2)}% saved)")
-        print(f"New version totals {format_bytes(new_size_original)} uncompressed ({'+' if size_diff_original > 0 else '+-' if size_diff_original == 0 else ''}{format_bytes(size_diff_original)}), {format_bytes(new_size_compressed)} compressed ({round(new_size_compressed/new_size_original*100, 2)}% saved)")
+        print(f"Old version totals {format_bytes(old_size_original)} uncompressed, {format_bytes(old_size_compressed)} compressed ({round(old_size_compressed/old_size_original*100, 2)}% ratio)")
+        print(f"New version totals {format_bytes(new_size_original)} uncompressed ({'+' if size_diff_original > 0 else '+-' if size_diff_original == 0 else ''}{format_bytes(size_diff_original)}), {format_bytes(new_size_compressed)} compressed ({round(new_size_compressed/new_size_original*100, 2)}% ratio)")
         print(f"{format_bytes(size_new_chunks)} added in {num_new_chunks} {'chunk' if num_new_chunks == 1 else 'chunks'}")
         print(f"{format_bytes(size_reused_chunks)} reused in {num_reused_chunks} {'chunk' if num_reused_chunks == 1 else 'chunks'}")
         print(f"{format_bytes(size_deleted_chunks)} deleted in {num_deleted_chunks} {'chunk' if num_deleted_chunks == 1 else 'chunks'}")
