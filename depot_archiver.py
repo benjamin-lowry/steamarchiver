@@ -41,17 +41,20 @@ from steam.client.cdn import CDNClient, CDNDepotManifest
 from steam.core.msg import MsgProto
 from steam.enums import EResult
 from steam.enums.emsg import EMsg
+from steam.exceptions import SteamError
 from steam.protobufs.content_manifest_pb2 import ContentManifestPayload
 from vdf import loads
 from aiohttp import ClientSession
 
 def archive_manifest(manifest, c, name="unknown", dry_run=False, server_override=None):
+    if not manifest:
+        return False
     print("Archiving", manifest.depot_id, "(%s)" % (name), "gid", manifest.gid, "from", datetime.fromtimestamp(manifest.creation_time))
     dest = "./depots/" + str(manifest.depot_id) + "/"
     makedirs(dest, exist_ok=True)
     if dry_run:
         print("Not downloading chunks (dry run)")
-        return
+        return True
     known_chunks = []
     for file in manifest.payload.mappings:
         for chunk in file.chunks:
@@ -133,8 +136,10 @@ def archive_manifest(manifest, c, name="unknown", dry_run=False, server_override
     run(run_workers(download_state))
     print("\nFinished downloading", manifest.depot_id, "(%s)" % (name), "gid", manifest.gid, "from", datetime.fromtimestamp(manifest.creation_time))
     print("Downloaded %s %s and skipped %s" % (download_state.chunks_dled, "chunk" if download_state.chunks_dled == 1 else "chunks", download_state.chunks_skipped))
+    return True
 
 def try_load_manifest(appid, depotid, manifestid):
+    print(f"Getting a manifest for app {appid} depot {depotid} gid {manifestid}")
     dest = "./depots/%s/%s.zip" % (depotid, manifestid)
     makedirs("./depots/%s" % depotid, exist_ok=True)
     if path.exists(dest):
@@ -142,7 +147,18 @@ def try_load_manifest(appid, depotid, manifestid):
             manifest = CDNDepotManifest(c, appid, f.read())
             print("Loaded cached manifest %s from disk" % manifestid)
     else:
-        manifest = c.get_manifest(appid, depotid, manifestid, decrypt=False, manifest_request_code=c.get_manifest_request_code(appid, depotid, manifestid))
+        while True:
+            try:
+                manifest = c.get_manifest(appid, depotid, manifestid, decrypt=False, manifest_request_code=c.get_manifest_request_code(appid, depotid, manifestid))
+                break
+            except SteamError as e:
+                if e.eresult == EResult.AccessDenied:
+                    print(e.message)
+                    print(f"Use the -i flag to log into a Steam account with access to this depot, or place a downloaded copy of the manifest at depots/{depotid}/{manifestid}.zip")
+                    return False
+                else:
+                    print(e.message + ": " + str(e.eresult))
+                    return False
         print("Downloaded manifest %s" % manifestid)
         print("Saving manifest...") # write manifest to disk. this will be a standard Zip with protobuf data inside
         with open(dest, "wb") as f:
@@ -228,15 +244,19 @@ if __name__ == "__main__":
         name = appinfo['depots'][str(args.depotid)]['name'] if 'name' in appinfo['depots'][str(args.depotid)] else 'unknown'
         if args.manifestid:
             print("Archiving", appinfo['common']['name'], "depot", args.depotid, "manifest", args.manifestid)
-            archive_manifest(try_load_manifest(args.appid, args.depotid, args.manifestid), c, name, args.dry_run, args.server)
+            exit(0 if archive_manifest(try_load_manifest(args.appid, args.depotid, args.manifestid), c, name, args.dry_run, args.server) else 1)
         else:
             print("Archiving", appinfo['common']['name'], "depot", args.depotid, "manifest", appinfo['depots'][str(args.depotid)]['manifests']['public'])
             manifest = int(appinfo['depots'][str(args.depotid)]['manifests']['public'])
-            archive_manifest(try_load_manifest(args.appid, args.depotid, manifest), c, name, args.dry_run, args.server)
+            exit(0 if archive_manifest(try_load_manifest(args.appid, args.depotid, manifest), c, name, args.dry_run, args.server) else 1)
     else:
         print("Archiving all latest depots for", appinfo['common']['name'], "build", appinfo['depots']['branches']['public']['buildid'])
+        exitcode = 0
         for depot in appinfo["depots"]:
             depotinfo = appinfo["depots"][depot]
             if not "manifests" in depotinfo or not "public" in depotinfo["manifests"]:
                 continue
-            archive_manifest(try_load_manifest(args.appid, depot, depotinfo["manifests"]["public"]), c, depotinfo["name"] if "name" in depotinfo else "unknown", args.dry_run, args.server)
+            success = archive_manifest(try_load_manifest(args.appid, depot, depotinfo["manifests"]["public"]), c, depotinfo["name"] if "name" in depotinfo else "unknown", args.dry_run, args.server)
+            if not success and exitcode == 0:
+                exitcode = 1
+        exit(exitcode)
