@@ -11,17 +11,14 @@ if __name__ == "__main__": # exit before we import our shit if the args are wron
     parser.add_argument("-t", type=int, help="Number of seconds to sleep between requests in daemon mode (default 5)", dest="time", default=5)
     parser.add_argument("-u", type=str, help="Username for non-interactive login", dest="username", nargs="?")
     parser.add_argument("-p", type=str, help="Password for non-interactive login", dest="password", nargs="?")
-    parser.add_argument("-g", type=str, help="Steam Guard code for non-interactive login", dest="code", nargs="?")
     args = parser.parse_args()
-    if args.username and not args.password:
-        print("invalid combination of arguments")
-        exit(1)
 
 from steam.client import SteamClient
 from steam.core.msg import MsgProto
 from steam.enums import EResult
 from steam.enums.emsg import EMsg
 from steam.webapi import WebAPI
+from login import auto_login
 
 if __name__ == "__main__":
     # Create directories
@@ -33,14 +30,11 @@ if __name__ == "__main__":
     steam_client.connect()
     print("Logging in...")
     if args.interactive:
-        steam_client.cli_login()
+        auto_login(steam_client, fallback_anonymous=False)
     elif args.username:
-        result = steam_client.login(username=args.username, password=args.password, two_factor_code=args.code, auth_code=args.code)
-        if result != EResult.OK:
-            print("error logging in:", result)
-            exit(1)
+        auto_login(steam_client, args.username, args.password)
     else:
-        steam_client.anonymous_login()
+        auto_login(steam_client)
 
     highest_changenumber = 0
     if path.exists("./last_change.txt"):

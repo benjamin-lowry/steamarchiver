@@ -6,6 +6,7 @@ from steam.enums.emsg import EMsg
 from os.path import exists
 from sys import argv
 from vdf import loads
+from login import auto_login
 
 if __name__ == "__main__":
     steam_client = SteamClient()
@@ -13,20 +14,13 @@ if __name__ == "__main__":
     steam_client.connect()
     print("Logging in...")
     if len(argv) == 1:
-        steam_client.cli_login()
+        auto_login(steam_client, fallback_anonymous=False) # probably don't want to default to anonymous for a depot key dumper...
     elif len(argv) == 2:
-        if argv[1] == "anonymous":
-            steam_client.anonymous_login()
-            print("Logged in anonymously")
-        else:
-            steam_client.cli_login(username=argv[1])
+        auto_login(steam_client, argv[1], fallback_anonymous=False)
     elif len(argv) == 3:
-        steam_client.cli_login(username=argv[1], password=argv[2])
-        print("Logged in as", argv[1])
-    elif len(argv) == 4:
-        steam_client.login(username=argv[1], password=argv[2], two_factor_code=argv[3], auth_code=argv[3])
+        auto_login(steam_client, argv[1], argv[2])
     else:
-        print("usage:", argv[0], "[username password steam_guard_code]")
+        print("usage:", argv[0], "[username password]")
         exit(1)
     licensed_packages = []
     licensed_apps = []

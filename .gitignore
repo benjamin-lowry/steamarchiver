@@ -1,5 +1,6 @@
 __pycache__
 appinfo/
+auth/
 depots/
 venv/
 virtualenv/

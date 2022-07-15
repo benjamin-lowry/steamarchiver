@@ -21,7 +21,6 @@ if __name__ == "__main__": # exit before we import our shit if the args are wron
     parser.add_argument("-i", help="Log into a Steam account interactively.", dest="interactive", action="store_true")
     parser.add_argument("-u", type=str, help="Username for non-interactive login", dest="username", nargs="?")
     parser.add_argument("-p", type=str, help="Password for non-interactive login", dest="password", nargs="?")
-    parser.add_argument("-g", type=str, help="Steam Guard code for non-interactive login", dest="code", nargs="?")
     args = parser.parse_args()
     if args.connection_limit < 1:
         print("connection limit must be at least 1")
@@ -45,6 +44,7 @@ from steam.exceptions import SteamError
 from steam.protobufs.content_manifest_pb2 import ContentManifestPayload
 from vdf import loads
 from aiohttp import ClientSession
+from login import auto_login
 
 def archive_manifest(manifest, c, name="unknown", dry_run=False, server_override=None):
     if not manifest:
@@ -175,14 +175,11 @@ if __name__ == "__main__":
     steam_client.connect()
     print("Logging in...")
     if args.interactive:
-        steam_client.cli_login()
+        auto_login(steam_client, fallback_anonymous=False, relogin=False)
     elif args.username:
-        result = steam_client.login(username=args.username, password=args.password, two_factor_code=args.code, auth_code=args.code)
-        if result != EResult.OK:
-            print("error logging in:", result)
-            exit(1)
+        auto_login(steam_client, args.username, args.password)
     else:
-        steam_client.anonymous_login()
+        auto_login(steam_client)
     c = CDNClient(steam_client)
     if args.workshop_id and not args.appid:
         response = steam_client.send_um_and_wait("PublishedFile.GetDetails#1", {'publishedfileids':[args.workshop_id]})
