@@ -197,7 +197,7 @@ if __name__ == "__main__":
         if file.file_url:
             print("error: workshop item is not on SteamPipe: its download URL is", file.file_url)
             exit(1)
-        archive_manifest(try_load_manifest(file.consumer_appid, file.consumer_appid, file.hcontent_file), c, args.dry_run, args.server)
+        archive_manifest(try_load_manifest(file.consumer_appid, file.consumer_appid, file.hcontent_file), c, file.title, args.dry_run, args.server)
         exit(0)
 
     # Fetch appinfo
