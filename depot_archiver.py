@@ -8,12 +8,10 @@ from os import makedirs, path, listdir
 from sys import argv
 
 if __name__ == "__main__": # exit before we import our shit if the args are wrong
-    parser = ArgumentParser(description='Download Steam content depots for archival.\nDownloading apps: Specify an app to download all the depots for that app, or an app and depot ID to download the latest version of that depot (or a specific version if the manifest ID is specified.)\nDownloading workshop items: Use the -w flag to specify the ID of the workshop file to download.')
-    parser.add_argument("appid", type=int, nargs='?', help="App ID to download depots for.")
-    parser.add_argument("depotid", type=int, nargs='?', help="Depot ID to download.")
-    manifest_group = parser.add_mutually_exclusive_group()
-    manifest_group.add_argument("manifestid", type=int, nargs='?', help="Manifest ID to download.")
-    manifest_group.add_argument("-w", type=int, nargs='?', help="Workshop file ID to download.", dest="workshop_id")
+    parser = ArgumentParser(description='Download Steam content depots for archival. Downloading apps: Specify an app to download all the depots for that app, or an app and depot ID to download the latest version of that depot (or a specific version if the manifest ID is specified.) Downloading workshop items: Use the -w flag to specify the ID of the workshop file to download. Exit code is 0 if all downloads succeeded, or the number of failures if at least one failed.')
+    dl_group = parser.add_mutually_exclusive_group()
+    dl_group.add_argument("-a", type=int, dest="downloads", metavar=("appid","depotid"), action="append", nargs='+', help="App, depot, and manifest ID to download. If the manifest ID is omitted, the lastest manifest specified by the public branch will be downloaded.\nIf the depot ID is omitted, all depots specified by the public branch will be downloaded.")
+    dl_group.add_argument("-w", type=int, nargs='?', help="Workshop file ID to download.", dest="workshop_id")
     parser.add_argument("-d", help="Dry run: download manifest (file metadata) without actually downloading files", dest="dry_run", action="store_true")
     parser.add_argument("-l", help="Use latest local appinfo instead of trying to download", dest="local_appinfo", action="store_true")
     parser.add_argument("-c", type=int, help="Number of concurrent downloads to perform at once, default 10", dest="connection_limit", default=10)
@@ -26,11 +24,11 @@ if __name__ == "__main__": # exit before we import our shit if the args are wron
         print("connection limit must be at least 1")
         parser.print_help()
         exit(1)
-    if not args.appid and not args.workshop_id:
+    if not args.downloads and not args.workshop_id:
         print("must specify at least one appid or workshop file id")
         parser.print_help()
         exit(1)
-    if args.appid and args.workshop_id:
+    if args.downloads and args.workshop_id:
         print("must specify only app or workshop item, not both")
         parser.print_help()
         exit(1)
@@ -98,7 +96,7 @@ def archive_manifest(manifest, c, name="unknown", dry_run=False, server_override
                                     break
                                 elif 400 <= response.status < 500:
                                     print(f"error: received status code {response.status} (on chunk {chunk_str}, server {host})")
-                                    exit(1)
+                                    return False
                         except Exception as e:
                             print("rotating to next server:", e)
                         servers.rotate(-1)
@@ -181,7 +179,7 @@ if __name__ == "__main__":
     else:
         auto_login(steam_client)
     c = CDNClient(steam_client)
-    if args.workshop_id and not args.appid:
+    if args.workshop_id:
         response = steam_client.send_um_and_wait("PublishedFile.GetDetails#1", {'publishedfileids':[args.workshop_id]})
         if response.header.eresult != EResult.OK:
             print("error: couldn't get workshop item info:", response.header.error_message)
@@ -200,60 +198,64 @@ if __name__ == "__main__":
         archive_manifest(try_load_manifest(file.consumer_appid, file.consumer_appid, file.hcontent_file), c, file.title, args.dry_run, args.server)
         exit(0)
 
-    # Fetch appinfo
-    if args.local_appinfo:
-        highest_changenumber = 0
-        for file in listdir("./appinfo/"):
-            if not file.endswith(".vdf"): continue
-            if not file.startswith(str(args.appid) + "_"): continue
-            changenumber = int(file.split("_")[1].replace(".vdf", ""))
-            if changenumber > highest_changenumber:
-                highest_changenumber = changenumber
-        if highest_changenumber == 0:
-            print("error: -l flag specified, but no local appinfo exists for app", args.appid)
-            exit(1)
-        appinfo_path = "./appinfo/%s_%s.vdf" % (args.appid, highest_changenumber)
-    else:
-        print("Fetching appinfo for", args.appid)
-        msg = MsgProto(EMsg.ClientPICSProductInfoRequest)
-        msg.body.apps.add().appid = args.appid
-        appinfo_response = steam_client.wait_event(steam_client.send_job(msg))[0].body.apps[0]
-        changenumber = appinfo_response.change_number
-        # Write vdf appinfo to disk
-        appinfo_path = "./appinfo/%s_%s.vdf" % (args.appid, changenumber)
-    if path.exists(appinfo_path):
-        with open(appinfo_path, "r", encoding="utf-8") as f:
-            appinfo = loads(f.read())['appinfo']
-        print("Loaded appinfo from", appinfo_path)
-    else:
-        with open(appinfo_path, "wb") as f:
-            f.write(appinfo_response.buffer[:-1])
-        print("Saved appinfo for app", args.appid, "changenumber", changenumber)
-        # decode appinfo
-        appinfo = loads(appinfo_response.buffer[:-1].decode('utf-8', 'replace'))['appinfo']
-    if "public_only" in appinfo.keys():
-        print("WARNING: this app has additional (private) info. The archive "
-                "may not work due to this info being missing. To get this "
-                "info, run get_appinfo.py on this app using an account "
-                "authorized to access it.")
+    # Iterate over all the downloads we want
+    exit_status = 0
+    for dl_tuple in args.downloads:
+        appid = dl_tuple[0]
+        depotid = (dl_tuple[1] if len(dl_tuple) > 1 else None)
+        manifestid = (dl_tuple[2] if len(dl_tuple) > 2 else None)
 
-    if args.depotid:
-        name = appinfo['depots'][str(args.depotid)]['name'] if 'name' in appinfo['depots'][str(args.depotid)] else 'unknown'
-        if args.manifestid:
-            print("Archiving", appinfo['common']['name'], "depot", args.depotid, "manifest", args.manifestid)
-            exit(0 if archive_manifest(try_load_manifest(args.appid, args.depotid, args.manifestid), c, name, args.dry_run, args.server) else 1)
+        # Fetch appinfo
+        if args.local_appinfo:
+            highest_changenumber = 0
+            for file in listdir("./appinfo/"):
+                if not file.endswith(".vdf"): continue
+                if not file.startswith(str(appid) + "_"): continue
+                changenumber = int(file.split("_")[1].replace(".vdf", ""))
+                if changenumber > highest_changenumber:
+                    highest_changenumber = changenumber
+            if highest_changenumber == 0:
+                print("error: -l flag specified, but no local appinfo exists for app", appid)
+                exit(1)
+            appinfo_path = "./appinfo/%s_%s.vdf" % (appid, highest_changenumber)
         else:
-            print("Archiving", appinfo['common']['name'], "depot", args.depotid, "manifest", appinfo['depots'][str(args.depotid)]['manifests']['public'])
-            manifest = int(appinfo['depots'][str(args.depotid)]['manifests']['public'])
-            exit(0 if archive_manifest(try_load_manifest(args.appid, args.depotid, manifest), c, name, args.dry_run, args.server) else 1)
-    else:
-        print("Archiving all latest depots for", appinfo['common']['name'], "build", appinfo['depots']['branches']['public']['buildid'])
-        exitcode = 0
-        for depot in appinfo["depots"]:
-            depotinfo = appinfo["depots"][depot]
-            if not "manifests" in depotinfo or not "public" in depotinfo["manifests"]:
-                continue
-            success = archive_manifest(try_load_manifest(args.appid, depot, depotinfo["manifests"]["public"]), c, depotinfo["name"] if "name" in depotinfo else "unknown", args.dry_run, args.server)
-            if not success and exitcode == 0:
-                exitcode = 1
-        exit(exitcode)
+            print("Fetching appinfo for", appid)
+            msg = MsgProto(EMsg.ClientPICSProductInfoRequest)
+            msg.body.apps.add().appid = appid
+            appinfo_response = steam_client.wait_event(steam_client.send_job(msg))[0].body.apps[0]
+            changenumber = appinfo_response.change_number
+            # Write vdf appinfo to disk
+            appinfo_path = "./appinfo/%s_%s.vdf" % (appid, changenumber)
+        if path.exists(appinfo_path):
+            with open(appinfo_path, "r", encoding="utf-8") as f:
+                appinfo = loads(f.read())['appinfo']
+            print("Loaded appinfo from", appinfo_path)
+        else:
+            with open(appinfo_path, "wb") as f:
+                f.write(appinfo_response.buffer[:-1])
+            print("Saved appinfo for app", appid, "changenumber", changenumber)
+            # decode appinfo
+            appinfo = loads(appinfo_response.buffer[:-1].decode('utf-8', 'replace'))['appinfo']
+        if "public_only" in appinfo.keys():
+            print("WARNING: this app has additional (private) info. The archive "
+                    "may not work due to this info being missing. To get this "
+                    "info, run get_appinfo.py on this app using an account "
+                    "authorized to access it.")
+
+        if depotid:
+            name = appinfo['depots'][str(depotid)]['name'] if 'name' in appinfo['depots'][str(depotid)] else 'unknown'
+            if manifestid:
+                print("Archiving", appinfo['common']['name'], "depot", depotid, "manifest", manifestid)
+                exit_status += (0 if archive_manifest(try_load_manifest(appid, depotid, manifestid), c, name, args.dry_run, args.server) else 1)
+            else:
+                print("Archiving", appinfo['common']['name'], "depot", depotid, "manifest", appinfo['depots'][str(depotid)]['manifests']['public'])
+                manifest = int(appinfo['depots'][str(depotid)]['manifests']['public'])
+                exit_status += (0 if archive_manifest(try_load_manifest(appid, depotid, manifest), c, name, args.dry_run, args.server) else 1)
+        else:
+            print("Archiving all latest depots for", appinfo['common']['name'], "build", appinfo['depots']['branches']['public']['buildid'])
+            for depot in appinfo["depots"]:
+                depotinfo = appinfo["depots"][depot]
+                if not "manifests" in depotinfo or not "public" in depotinfo["manifests"]:
+                    continue
+                exit_status += (0 if archive_manifest(try_load_manifest(appid, depot, depotinfo["manifests"]["public"]), c, depotinfo["name"] if "name" in depotinfo else "unknown", args.dry_run, args.server) else 1)
+    exit(exit_status)
