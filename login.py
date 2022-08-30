@@ -6,6 +6,7 @@ from os.path import exists
 
 def auto_login(client, username="", password="", fallback_anonymous=True, relogin=True):
     assert(type(client) == SteamClient)
+    makedirs("./auth", exist_ok=True)
     client.set_credential_location("./auth")
     if username == "anonymous":
         client.anonymous_login()
