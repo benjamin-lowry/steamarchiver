@@ -91,7 +91,7 @@ if __name__ == "__main__":
                     print(f"modified file {file.filename}")
                     print(f"\told: {format_bytes(old_file.size)} in {len(old_file.chunks)} {'chunk' if len(old_file.chunks) == 1 else 'chunks'}")
                     size_diff = file.size - old_file.size
-                    print(f"\tnew: {format_bytes(file.size)} ({'+' if size_diff > 0 else '+-' if size_diff == 0 else ''}{size_diff} {'byte' if size_diff == 1 else 'bytes'}) in {len(old_file.chunks)} {'chunk' if len(old_file.chunks) == 1 else 'chunks'}")
+                    print(f"\tnew: {format_bytes(file.size)} ({'+' if size_diff > 0 else '+-' if size_diff == 0 else ''}{size_diff} {'byte' if size_diff == 1 else 'bytes'}) in {len(file.chunks)} {'chunk' if len(file.chunks) == 1 else 'chunks'}")
     if not args.quiet:
         for filename, file in old_files.items():
             print(f"deleted file {filename}")
