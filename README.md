@@ -69,16 +69,16 @@ shown):
 
 Download all the depots for Team Fortress 2:
 
-    python3 depot_archiver.py 440
+    python3 depot_archiver.py -a 440
 
 Download the Team Fortress 2 Linux client binaries that were released at
-2021-06-22 20:13:56:
+2022-08-11 22:29:49:
 
-    python3 depot_archiver.py 440 232253 3977101045377481242
+    python3 depot_archiver.py -a 440 232253 5841585021586447253
 
 Extract those binaries:
 
-    python3 depot_extractor.py 232253 3977101045377481242 bdbeae4f56fa865d8df2f76623d3346fcd7e56df6dee13b0f23e4a0fe160a446
+    python3 depot_extractor.py 232253 5841585021586447253 bdbeae4f56fa865d8df2f76623d3346fcd7e56df6dee13b0f23e4a0fe160a446
 
 (Note: the key for the above command was found in depot_keys.txt, in this line:)
 
