@@ -46,3 +46,6 @@ def post_login(client, used_login_key=False):
             f.write(client.login_key)
     with open("./auth/lastuser.txt", "w") as f:
         f.write(client.username)
+
+if __name__ == "__main__":
+    auto_login(SteamClient(), fallback_anonymous=False, relogin=False)
