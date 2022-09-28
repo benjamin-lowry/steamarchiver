@@ -108,7 +108,7 @@ if __name__ == "__main__":
                         if args.depotkey:
                             decrypted = symmetric_decrypt(chunk_data, args.depotkey)
                         else:
-                            print("ERROR: chunk %s is encrypted, but no depot key was specified" % hexlify(chunk.sha).decode())
+                            print("ERROR: chunk %s is encrypted, but no depot key was specified" % chunkhex)
                             exit(1)
 
                 else:
