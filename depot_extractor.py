@@ -3,6 +3,7 @@ from argparse import ArgumentParser
 from binascii import hexlify
 from datetime import datetime
 from fnmatch import fnmatch
+from glob import glob
 from hashlib import sha1
 from io import BytesIO
 from os import makedirs, remove
@@ -20,11 +21,13 @@ if __name__ == "__main__": # exit before we import our shit if the args are wron
     parser.add_argument('depotkey', type=str, nargs='?')
     parser.add_argument('-d', dest="dry_run", help="dry run: verify chunks without extracting", action="store_true")
     parser.add_argument('-f', dest="files", help="List files to extract (can be used multiple times); if ommitted, all files will be extracted. Glob matching supported.", action="append")
+    parser.add_argument('-b', dest="backup", help="Path to a .csd backup file to extract (the manifest must also be present in the depots folder)", nargs='?')
     parser.add_argument('--dest', help="directory to place extracted files in", type=str, default="extract")
     args = parser.parse_args()
 
 from steam.core.manifest import DepotManifest
 from steam.core.crypto import symmetric_decrypt
+from unpack_sis import Chunkstore
 
 if __name__ == "__main__":
     path = "./depots/%s/" % args.depotid
@@ -56,6 +59,16 @@ if __name__ == "__main__":
             if fnmatch(file.filename, pattern): return True
         return False
 
+    if args.backup:
+        chunkstores = {}
+        chunks_by_store = {}
+        for csm in glob(args.backup.replace("_1.csm","").replace("_1.csd","") + "_*.csm"):
+            chunkstore = Chunkstore(csm)
+            chunkstore.unpack()
+            for chunk, _ in chunkstore.chunks.items():
+                chunks_by_store[chunk] = csm
+            chunkstores[csm] = chunkstore
+
     for file in manifest.iter_files():
         if args.files and not is_match(file): continue
         target = args.dest + "/" + dirname(file.filename)
@@ -66,7 +79,7 @@ if __name__ == "__main__":
                 remove(target)
                 makedirs(target, exist_ok=True)
             except NotADirectoryError:
-                # oh my fucking god
+                # bruh
                 while True:
                     try:
                         remove(Path(target).parent)
@@ -80,19 +93,38 @@ if __name__ == "__main__":
         try:
             for chunk in sorted(file.chunks, key = lambda chunk: chunk.offset):
                 chunkhex = hexlify(chunk.sha).decode()
-                if exists(path + chunkhex):
-                    with open(path + chunkhex, "rb") as chunkfile:
+                if args.backup:
+                    chunk_data = None
+                    is_encrypted = False
+                    try:
+                        chunkstore = chunkstores[chunks_by_store[chunk.sha]]
+                        chunk_data = chunkstore.get_chunk(chunk.sha)
+                        is_encrypted = chunkstore.is_encrypted
+                    except:
+                        print("missing chunk " + hexlify(chunk.sha).decode())
+                        breakpoint()
+                        continue
+                    if is_encrypted:
                         if args.depotkey:
-                            decrypted = symmetric_decrypt(chunkfile.read(), args.depotkey)
+                            decrypted = symmetric_decrypt(chunk_data, args.depotkey)
                         else:
-                            print("ERROR: chunk %s is encrypted, but no depot key was specified" % chunkhex)
+                            print("ERROR: chunk %s is encrypted, but no depot key was specified" % hexlify(chunk.sha).decode())
                             exit(1)
-                elif exists(path + chunkhex + "_decrypted"):
-                    with open(path + chunkhex + "_decrypted", "rb") as chunkfile:
-                        decrypted = chunkfile.read()
+
                 else:
-                    print("missing chunk " + chunkhex)
-                    continue
+                    if exists(path + chunkhex):
+                        with open(path + chunkhex, "rb") as chunkfile:
+                            if args.depotkey:
+                                decrypted = symmetric_decrypt(chunkfile.read(), args.depotkey)
+                            else:
+                                print("ERROR: chunk %s is encrypted, but no depot key was specified" % chunkhex)
+                                exit(1)
+                    elif exists(path + chunkhex + "_decrypted"):
+                        with open(path + chunkhex + "_decrypted", "rb") as chunkfile:
+                            decrypted = chunkfile.read()
+                    else:
+                        print("missing chunk " + chunkhex)
+                        continue
                 decompressed = None
                 if decrypted[:2] == b'VZ': # LZMA
                     if args.dry_run:

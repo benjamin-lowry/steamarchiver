@@ -9,33 +9,63 @@ from struct import iter_unpack
 from sys import argv
 from vdf import loads
 
+class Chunkstore():
+    def __init__(self, filename):
+        filename = filename.replace(".csd","").replace(".csm","")
+        self.csmname = filename + ".csm"
+        self.csdname = filename + ".csd"
+        self.chunks = {}
+        self.csdfile = None
+        self.open()
+        with open(self.csmname, "rb") as csmfile:
+            self.csm = csmfile.read()
+            if self.csm[:4] != b"SCFS":
+                print("not a CSM file: " + (filename + ".csm"))
+                return False
+            self.depot = int.from_bytes(self.csm[0xc:0x10], byteorder='little', signed=False)
+            self.is_encrypted = (self.csm[0x8:0xa] == b'\x03\x00')
+    def __repr__(self):
+        return f"Depot {self.depot} (encrypted: {self.is_encrypted}) from CSD file {self.csdname}"
+    def unpack(self, unpacker=None):
+        if unpacker: assert callable(unpacker)
+        self.open()
+        csm = self.csm[0x14:]
+        for sha, offset, _, length in iter_unpack("<20s Q L L", csm):
+            self.chunks[sha] = (offset, length)
+            if unpacker: unpacker(self, sha, offset, length)
+    def open(self):
+        if not self.csdfile:
+            self.csdfile = open(self.csdname, "rb")
+    def close(self):
+        if self.csdfile:
+            self.csdfile.close()
+        self.csdfile = None
+    def get_chunk(self, sha):
+        self.open()
+        self.csdfile.seek(self.chunks[sha][0])
+        return self.csdfile.read(self.chunks[sha][1])
+
 def unpack_chunkstore(target, key=None, key_hex=None):
-    with open(target + ".csm", "rb") as csmfile, open(target + ".csd", "rb") as csdfile:
-        csm = csmfile.read()
-        if csm[:4] != b"SCFS":
-            print("not a CSM file: " + (target + ".csm"))
-            return False
-        depot = int.from_bytes(csm[0xc:0x10], byteorder='little', signed=False)
-        makedirs("./depots/%s" % depot, exist_ok=True)
         if key == True:
             key, key_hex = find_key(depot)
-        is_encrypted = (csm[0x8:0xa] == b'\x03\x00')
-        csm = csm[0x14:]
-        for sha, offset, _, length in iter_unpack("<20s Q L L", csm):
+        def unpacker(chunkstore, sha, offset, length):
             print("extracting chunk %s from offset %s in file %s" % (hexlify(sha).decode(), offset, target + ".csd"))
-            csdfile.seek(offset)
+            chunkstore.csdfile.seek(offset)
             if key:
-                with open("./depots/%s/%s" % (depot, hexlify(sha).decode()), "wb") as f:
+                with open("./depots/%s/%s" % (chunkstore.depot, hexlify(sha).decode()), "wb") as f:
                     print("writing %s bytes re-encrypted using key %s and random IV" % (length, key_hex))
-                    f.write(symmetric_encrypt(csdfile.read(length), key))
-            elif is_encrypted:
-                with open("./depots/%s/%s" % (depot, hexlify(sha).decode()), "wb") as f:
+                    f.write(symmetric_encrypt(chunkstore.csdfile.read(length), key))
+            elif chunkstore.is_encrypted:
+                with open("./depots/%s/%s" % (chunkstore.depot, hexlify(sha).decode()), "wb") as f:
                     print("writing %s bytes encrypted" % length)
-                    f.write(csdfile.read(length))
+                    f.write(chunkstore.csdfile.read(length))
             else:
-                with open("./depots/%s/%s_decrypted" % (depot, hexlify(sha).decode()), "wb") as f:
+                with open("./depots/%s/%s_decrypted" % (chunkstore.depot, hexlify(sha).decode()), "wb") as f:
                     print("writing %s bytes unencrypted" % length)
-                    f.write(csdfile.read(length))
+                    f.write(chunkstore.csdfile.read(length))
+        chunkstore = Chunkstore(target)
+        makedirs("./depots/%s" % chunkstore.depot, exist_ok=True)
+        chunkstore.unpack(unpacker)
 
 def find_key(depot):
     if path.exists("./depot_keys.txt"):
