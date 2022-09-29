@@ -89,7 +89,6 @@ def unpack_sis(sku, chunkstore_path, use_key = False):
         key, key_hex = None, None
         if use_key and sku["backup"] == "1":
             key, key_hex = find_key(depot)
-            breakpoint()
         need_manifests[depot] = sku["manifests"][depot]
         for chunkstore in sku["chunkstores"][depot]:
             print("unpacking chunkstore %s" % chunkstore)
