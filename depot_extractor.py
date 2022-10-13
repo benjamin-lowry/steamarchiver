@@ -27,7 +27,7 @@ if __name__ == "__main__": # exit before we import our shit if the args are wron
 
 from steam.core.manifest import DepotManifest
 from steam.core.crypto import symmetric_decrypt
-from unpack_sis import Chunkstore
+from chunkstore import Chunkstore
 
 if __name__ == "__main__":
     path = "./depots/%s/" % args.depotid
@@ -43,10 +43,13 @@ if __name__ == "__main__":
                 with open("./depot_keys.txt", "r", encoding="utf-8") as f:
                     for line in f.read().split("\n"):
                         line = line.split("\t")
-                        if int(line[0]) == args.depotid:
-                            args.depotkey = bytes.fromhex(line[2])
-                            manifest.decrypt_filenames(args.depotkey)
-                            break
+                        try:
+                            if int(line[0]) == args.depotid:
+                                args.depotkey = bytes.fromhex(line[2])
+                                manifest.decrypt_filenames(args.depotkey)
+                                break
+                        except ValueError:
+                            pass
                     if not args.depotkey:
                         print("ERROR: manifest has encrypted filenames, but no depot key was specified and no key for this depot exists in depot_keys.txt")
                         exit(1)
@@ -110,6 +113,9 @@ if __name__ == "__main__":
                         else:
                             print("ERROR: chunk %s is encrypted, but no depot key was specified" % chunkhex)
                             exit(1)
+                    else:
+                        decrypted = chunk_data
+                        chunk_data = None
 
                 else:
                     if exists(path + chunkhex):
