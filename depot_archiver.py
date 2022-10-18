@@ -12,6 +12,7 @@ if __name__ == "__main__": # exit before we import our shit if the args are wron
     dl_group = parser.add_mutually_exclusive_group()
     dl_group.add_argument("-a", type=int, dest="downloads", metavar=("appid","depotid"), action="append", nargs='+', help="App, depot, and manifest ID to download. If the manifest ID is omitted, the lastest manifest specified by the public branch will be downloaded.\nIf the depot ID is omitted, all depots specified by the public branch will be downloaded.")
     dl_group.add_argument("-w", type=int, nargs='?', help="Workshop file ID to download.", dest="workshop_id")
+    parser.add_argument("-b", help="Download into a Steam backup file instead of storing the chunks individually", dest="backup", action="store_true")
     parser.add_argument("-d", help="Dry run: download manifest (file metadata) without actually downloading files", dest="dry_run", action="store_true")
     parser.add_argument("-l", help="Use latest local appinfo instead of trying to download", dest="local_appinfo", action="store_true")
     parser.add_argument("-c", type=int, help="Number of concurrent downloads to perform at once, default 10", dest="connection_limit", default=10)
@@ -43,8 +44,9 @@ from steam.protobufs.content_manifest_pb2 import ContentManifestPayload
 from vdf import loads
 from aiohttp import ClientSession
 from login import auto_login
+from chunkstore import Chunkstore
 
-def archive_manifest(manifest, c, name="unknown", dry_run=False, server_override=None):
+def archive_manifest(manifest, c, name="unknown", dry_run=False, server_override=None, backup=False):
     if not manifest:
         return False
     print("Archiving", manifest.depot_id, "(%s)" % (name), "gid", manifest.gid, "from", datetime.fromtimestamp(manifest.creation_time))
@@ -53,6 +55,12 @@ def archive_manifest(manifest, c, name="unknown", dry_run=False, server_override
     if dry_run:
         print("Not downloading chunks (dry run)")
         return True
+    if backup:
+        chunkstore = Chunkstore(str(manifest.depot_id) + "_depotcache_1.csm", depot=manifest.depot_id, is_encrypted=True)
+        if path.exists(chunkstore.csdname): chunkstore.unpack()
+        csdfile = open(chunkstore.csdname, "ab")
+    else:
+        chunkstore, csdfile = None, None
     known_chunks = []
     for file in manifest.payload.mappings:
         for chunk in file.chunks:
@@ -64,44 +72,51 @@ def archive_manifest(manifest, c, name="unknown", dry_run=False, server_override
             self.chunks_skipped = 0
             self.bytes = 0
     download_state = download_state()
-    async def dl_worker(chunks, download_state, servers):
+    async def dl_worker(chunks, download_state, servers, chunkstore=None, csdfile=None):
         server = servers[0]
         async with ClientSession() as session:
             for index, chunk in enumerate(chunks):
-                if path.exists(dest + hexlify(chunk).decode()):
+                if path.exists(dest + hexlify(chunk).decode()) or (chunkstore and (chunk in chunkstore.chunks.keys())):
                     download_state.chunks_skipped += 1
                     del chunks[index]
             for chunk in chunks:
                 chunk_str = hexlify(chunk).decode()
-                if path.exists(dest + chunk_str):
+                if path.exists(dest + chunk_str) or (chunkstore and (chunk in chunkstore.chunks.keys())):
                     download_state.chunks_skipped += 1
                     continue
-                with open(dest + chunk_str, "wb") as f:
-                    while True:
-                        try:
-                            if server_override:
-                                request_url = "%s/depot/%s/chunk/%s" % (server_override, manifest.depot_id, chunk_str)
-                                host = server_override
-                            else:
-                                request_url = "%s://%s:%s/depot/%s/chunk/%s" % ("https" if server.https else "http",
-                                    server.host,
-                                    server.port,
-                                    manifest.depot_id,
-                                    chunk_str)
-                                host = ("https" if server.https else "http") + "://" + server.host
-                            async with session.get(request_url) as response:
-                                if response.ok:
-                                    download_state.bytes += response.content_length
-                                    f.write(await response.content.read())
-                                    break
-                                elif 400 <= response.status < 500:
-                                    print(f"error: received status code {response.status} (on chunk {chunk_str}, server {host})")
-                                    return False
-                        except Exception as e:
-                            print("rotating to next server:", e)
-                        servers.rotate(-1)
-                        server = servers[0]
-                        await sleep(0.5)
+                if not csdfile: f = open(dest + chunk_str, "wb")
+                else: f = csdfile
+                while True:
+                    try:
+                        if server_override:
+                            request_url = "%s/depot/%s/chunk/%s" % (server_override, manifest.depot_id, chunk_str)
+                            host = server_override
+                        else:
+                            request_url = "%s://%s:%s/depot/%s/chunk/%s" % ("https" if server.https else "http",
+                                server.host,
+                                server.port,
+                                manifest.depot_id,
+                                chunk_str)
+                            host = ("https" if server.https else "http") + "://" + server.host
+                        async with session.get(request_url) as response:
+                            if response.ok:
+                                download_state.bytes += response.content_length
+                                content = await response.content.read()
+                                break
+                            elif 400 <= response.status < 500:
+                                print(f"error: received status code {response.status} (on chunk {chunk_str}, server {host})")
+                                return False
+                    except Exception as e:
+                        print("rotating to next server:", e)
+                    servers.rotate(-1)
+                    server = servers[0]
+                    await sleep(0.5)
+                f.seek(0, 2)
+                offset = f.tell()
+                length = f.write(content)
+                if chunkstore:
+                    chunkstore.chunks[chunk] = (offset, length)
+                if not csdfile: f.close()
                 download_state.chunks_dled += 1
     async def summary_printer(download_state):
         averages = []
@@ -128,10 +143,13 @@ def archive_manifest(manifest, c, name="unknown", dry_run=False, server_override
         workers = [summary_printer(download_state)]
         chunk_size = int(ceil(len(known_chunks)/args.connection_limit))
         for i in range(args.connection_limit):
-            workers.append(dl_worker(known_chunks[i * chunk_size:i * chunk_size + chunk_size], download_state, c.servers.copy()))
+            workers.append(dl_worker(known_chunks[i * chunk_size:i * chunk_size + chunk_size], download_state, c.servers.copy(), chunkstore, csdfile))
         await gather(*workers)
 
     run(run_workers(download_state))
+    if chunkstore:
+        chunkstore.write_csm()
+        csdfile.close()
     print("\nFinished downloading", manifest.depot_id, "(%s)" % (name), "gid", manifest.gid, "from", datetime.fromtimestamp(manifest.creation_time))
     print("Downloaded %s %s and skipped %s" % (download_state.chunks_dled, "chunk" if download_state.chunks_dled == 1 else "chunks", download_state.chunks_skipped))
     return True
@@ -195,7 +213,7 @@ if __name__ == "__main__":
         if file.file_url:
             print("error: workshop item is not on SteamPipe: its download URL is", file.file_url)
             exit(1)
-        archive_manifest(try_load_manifest(file.consumer_appid, file.consumer_appid, file.hcontent_file), c, file.title, args.dry_run, args.server)
+        archive_manifest(try_load_manifest(file.consumer_appid, file.consumer_appid, file.hcontent_file), c, file.title, args.dry_run, args.server, args.backup)
         exit(0)
 
     # Iterate over all the downloads we want
@@ -246,16 +264,16 @@ if __name__ == "__main__":
             name = appinfo['depots'][str(depotid)]['name'] if 'name' in appinfo['depots'][str(depotid)] else 'unknown'
             if manifestid:
                 print("Archiving", appinfo['common']['name'], "depot", depotid, "manifest", manifestid)
-                exit_status += (0 if archive_manifest(try_load_manifest(appid, depotid, manifestid), c, name, args.dry_run, args.server) else 1)
+                exit_status += (0 if archive_manifest(try_load_manifest(appid, depotid, manifestid), c, name, args.dry_run, args.server, args.backup) else 1)
             else:
                 print("Archiving", appinfo['common']['name'], "depot", depotid, "manifest", appinfo['depots'][str(depotid)]['manifests']['public'])
                 manifest = int(appinfo['depots'][str(depotid)]['manifests']['public'])
-                exit_status += (0 if archive_manifest(try_load_manifest(appid, depotid, manifest), c, name, args.dry_run, args.server) else 1)
+                exit_status += (0 if archive_manifest(try_load_manifest(appid, depotid, manifest), c, name, args.dry_run, args.server, args.backup) else 1)
         else:
             print("Archiving all latest depots for", appinfo['common']['name'], "build", appinfo['depots']['branches']['public']['buildid'])
             for depot in appinfo["depots"]:
                 depotinfo = appinfo["depots"][depot]
                 if not "manifests" in depotinfo or not "public" in depotinfo["manifests"]:
                     continue
-                exit_status += (0 if archive_manifest(try_load_manifest(appid, depot, depotinfo["manifests"]["public"]), c, depotinfo["name"] if "name" in depotinfo else "unknown", args.dry_run, args.server) else 1)
+                exit_status += (0 if archive_manifest(try_load_manifest(appid, depot, depotinfo["manifests"]["public"]), c, depotinfo["name"] if "name" in depotinfo else "unknown", args.dry_run, args.server, args.backup) else 1)
     exit(exit_status)
