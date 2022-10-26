@@ -48,8 +48,20 @@ Usage for the Python scripts:
   depot_extractor you need to have a downloaded copy of the manifest (you can
   get one by running depot_archiver in dry run mode, using the -d flag) and the
   decryption key.
+- ``pack_sis.py`` goes the other way, packing depot chunks from a depots/
+  subfolder into .csd and .csm archive files. This is useful for transferring
+  (as moving two files is usually much faster than moving a couple thousand), or
+  for restoring a backup using the Steam client (requires specifying a depot
+  manifest so an sku.sis file can be generated.)
+- ``diff_manifests.py`` displays the difference between two manifests of the
+  same depot, showing which files were added/changed/removed, the download size
+  of the depot, and the change in on-disk size after download.
 - ``steam_websocket_mitm.py`` is an mitmproxy script to inspect Steam's
   WebSockets network traffic. This is only really useful for debugging.
+- ``login.py`` runs an interactive login and stores the credentials to be used
+  by another script.
+- ``chunkstore.py`` loads a .csd/.csm and lists the depot ID, encryption, and
+  number of chunks without unpacking anything.
 
 The folder steamlancache contains an HTTP server (written in Golang) that you
 can use as a LAN cache for Steam to speed up downloads and automatically archive
@@ -86,7 +98,7 @@ Extract those binaries:
 
 ## License
 
-   Copyright 2021 Benjamin Lowry
+   Copyright 2021-2022 Benjamin Lowry
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
