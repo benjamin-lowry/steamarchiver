@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from argparse import ArgumentParser
 from binascii import hexlify
 from steam.client import SteamClient
 from steam.core.msg import MsgProto
@@ -9,19 +10,23 @@ from vdf import loads
 from login import auto_login
 
 if __name__ == "__main__":
+    parser = ArgumentParser(description='Request and save depot keys.')
+    parser.add_argument('-d', dest="depots", help="depot to get key for (can be used multiple times)", action="append", nargs='?', type=int)
+    parser.add_argument('-a', dest="apps", help="app to get all depot keys for (can be used multiple times)", action="append", nargs='?', type=int)
+    parser.add_argument("-i", help="Log into a Steam account interactively.", dest="interactive", action="store_true")
+    parser.add_argument("-u", type=str, help="Username for non-interactive login", dest="username", nargs="?")
+    parser.add_argument("-p", type=str, help="Password for non-interactive login", dest="password", nargs="?")
+    args = parser.parse_args()
     steam_client = SteamClient()
     print("Connecting to the Steam network...")
     steam_client.connect()
     print("Logging in...")
-    if len(argv) == 1:
-        auto_login(steam_client, fallback_anonymous=False) # probably don't want to default to anonymous for a depot key dumper...
-    elif len(argv) == 2:
-        auto_login(steam_client, argv[1], fallback_anonymous=False)
-    elif len(argv) == 3:
-        auto_login(steam_client, argv[1], argv[2])
+    if args.interactive:
+        auto_login(steam_client, fallback_anonymous=False, relogin=False)
+    elif args.username:
+        auto_login(steam_client, args.username, args.password)
     else:
-        print("usage:", argv[0], "[username password]")
-        exit(1)
+        auto_login(steam_client)
     licensed_packages = []
     licensed_apps = []
     licensed_depots = []
@@ -39,6 +44,31 @@ if __name__ == "__main__":
         for app in package['appids'].values():
             print("Found license for app %s" % app)
             licensed_apps.append(app)
+
+    if args.apps:
+        diff = set(args.apps).difference(licensed_apps)
+        if diff:
+            result, granted_appids, granted_packageids = steam_client.request_free_license(diff)
+            for package in granted_packageids:
+                print("Obtained free license for package", package)
+            for app in granted_appids:
+                print("Obtained free license for app", app)
+            licensed_apps += granted_appids
+            licensed_packages += granted_packageids
+            grant_diff = set(args.apps).difference(granted_appids)
+            if grant_diff:
+                if len(args.apps) == 1:
+                    print("ERROR: unable to obtain license for", args.apps[0])
+                else:
+                    print("ERROR: unable to obtain licenses for", grant_diff)
+                exit(1)
+            else:
+                # we got new licenses, so now we need to get the list of depots included in those licenses
+                product_info = steam_client.get_product_info(packages=granted_packageids)
+                for package in product_info['packages'].values():
+                    for depot in package['depotids'].values():
+                        print("Found license for depot %s" % depot)
+                        licensed_depots.append(depot)
 
     msg = MsgProto(EMsg.ClientPICSProductInfoRequest)
     for app in licensed_apps:
@@ -77,6 +107,9 @@ if __name__ == "__main__":
         for app, app_info in app_dict.items():
             if not app in licensed_apps:
                 continue
+            if args.apps:
+                if app not in args.apps:
+                    continue
             if not 'depots' in app_info:
                 continue
             if not app in app_info['depots']:
@@ -86,6 +119,9 @@ if __name__ == "__main__":
                     depot = int(depot)
                 except ValueError:
                     continue
+                if args.depots:
+                    if depot not in args.depots:
+                        continue
                 if depot in keys_saved:
                     print("skipping previously saved key for depot", depot)
                     continue
