@@ -4,7 +4,7 @@ from asyncio import run, gather, sleep
 from binascii import hexlify
 from datetime import datetime
 from math import ceil
-from os import makedirs, path, listdir
+from os import makedirs, path, listdir, remove
 from sys import argv
 
 if __name__ == "__main__": # exit before we import our shit if the args are wrong
@@ -238,17 +238,27 @@ if __name__ == "__main__":
             appinfo_path = "./appinfo/%s_%s.vdf" % (appid, highest_changenumber)
         else:
             print("Fetching appinfo for", appid)
+            tokens = steam_client.get_access_tokens(app_ids=[appid])
             msg = MsgProto(EMsg.ClientPICSProductInfoRequest)
-            msg.body.apps.add().appid = appid
+            body_app = msg.body.apps.add()
+            body_app.appid = appid
+            if 'apps' in tokens.keys() and appid in tokens['apps'].keys():
+                body_app.access_token = tokens['apps'][appid]
             appinfo_response = steam_client.wait_event(steam_client.send_job(msg))[0].body.apps[0]
             changenumber = appinfo_response.change_number
             # Write vdf appinfo to disk
             appinfo_path = "./appinfo/%s_%s.vdf" % (appid, changenumber)
+        need_to_write_appinfo = True
         if path.exists(appinfo_path):
             with open(appinfo_path, "r", encoding="utf-8") as f:
                 appinfo = loads(f.read())['appinfo']
-            print("Loaded appinfo from", appinfo_path)
-        else:
+            if 'public_only' in appinfo.keys():
+                if appinfo['public_only'] == '1':
+                    print("Replacing public_only appinfo at:", appinfo_path)
+                    remove(appinfo_path)
+            else:
+                need_to_write_appinfo = False
+        if need_to_write_appinfo:
             with open(appinfo_path, "wb") as f:
                 f.write(appinfo_response.buffer[:-1])
             print("Saved appinfo for app", appid, "changenumber", changenumber)

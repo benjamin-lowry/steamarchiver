@@ -65,14 +65,19 @@ if __name__ == "__main__":
             else:
                 # we got new licenses, so now we need to get the list of depots included in those licenses
                 product_info = steam_client.get_product_info(packages=granted_packageids)
-                for package in product_info['packages'].values():
-                    for depot in package['depotids'].values():
-                        print("Found license for depot %s" % depot)
-                        licensed_depots.append(depot)
+                if product_info:
+                    for package in product_info['packages'].values():
+                        for depot in package['depotids'].values():
+                            print("Found license for depot %s" % depot)
+                            licensed_depots.append(depot)
 
     msg = MsgProto(EMsg.ClientPICSProductInfoRequest)
+    tokens = steam_client.get_access_tokens(app_ids=licensed_apps)
     for app in licensed_apps:
-        msg.body.apps.add().appid = app
+        body_app = msg.body.apps.add()
+        body_app.appid = app
+        if 'apps' in tokens.keys() and app in tokens['apps'].keys():
+            body_app.access_token = tokens['apps'][app]
     job = steam_client.send_job(msg)
     appinfo_response = []
     response = steam_client.wait_event(job)[0].body
