@@ -164,11 +164,16 @@ def try_load_manifest(appid, depotid, manifestid):
             print("Loaded cached manifest %s from disk" % manifestid)
     else:
         while True:
+            license_requested = False
             try:
                 manifest = c.get_manifest(appid, depotid, manifestid, decrypt=False, manifest_request_code=c.get_manifest_request_code(appid, depotid, manifestid))
                 break
             except SteamError as e:
                 if e.eresult == EResult.AccessDenied:
+                    if not license_requested:
+                        result, granted_appids, granted_packageids = steam_client.request_free_license([appid])
+                        license_requested = True
+                        continue
                     print(e.message)
                     print(f"Use the -i flag to log into a Steam account with access to this depot, or place a downloaded copy of the manifest at depots/{depotid}/{manifestid}.zip")
                     return False
