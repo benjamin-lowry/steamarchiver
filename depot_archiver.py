@@ -186,6 +186,14 @@ def try_load_manifest(appid, depotid, manifestid):
             f.write(manifest.serialize())
     return manifest
 
+def get_gid(manifest):
+    if type(manifest) == str:
+        return int(manifest)
+    elif type(manifest) == int:
+        return manifest
+    else:
+        return manifest["gid"]
+
 if __name__ == "__main__":
     # Create directories
     makedirs("./appinfo", exist_ok=True)
@@ -281,8 +289,8 @@ if __name__ == "__main__":
                 print("Archiving", appinfo['common']['name'], "depot", depotid, "manifest", manifestid)
                 exit_status += (0 if archive_manifest(try_load_manifest(appid, depotid, manifestid), c, name, args.dry_run, args.server, args.backup) else 1)
             else:
-                print("Archiving", appinfo['common']['name'], "depot", depotid, "manifest", appinfo['depots'][str(depotid)]['manifests']['public'])
-                manifest = int(appinfo['depots'][str(depotid)]['manifests']['public'])
+                manifest = get_gid(appinfo['depots'][str(depotid)]['manifests']['public'])
+                print("Archiving", appinfo['common']['name'], "depot", depotid, "manifest", manifest)
                 exit_status += (0 if archive_manifest(try_load_manifest(appid, depotid, manifest), c, name, args.dry_run, args.server, args.backup) else 1)
         else:
             print("Archiving all latest depots for", appinfo['common']['name'], "build", appinfo['depots']['branches']['public']['buildid'])
@@ -290,5 +298,5 @@ if __name__ == "__main__":
                 depotinfo = appinfo["depots"][depot]
                 if not "manifests" in depotinfo or not "public" in depotinfo["manifests"]:
                     continue
-                exit_status += (0 if archive_manifest(try_load_manifest(appid, depot, depotinfo["manifests"]["public"]), c, depotinfo["name"] if "name" in depotinfo else "unknown", args.dry_run, args.server, args.backup) else 1)
+                exit_status += (0 if archive_manifest(try_load_manifest(appid, depot, get_gid(depotinfo["manifests"]["public"])), c, depotinfo["name"] if "name" in depotinfo else "unknown", args.dry_run, args.server, args.backup) else 1)
     exit(exit_status)
