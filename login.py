@@ -37,13 +37,13 @@ def auto_login(client, username="", password="", fallback_anonymous=True, relogi
 def post_login(client, used_login_key=False):
     assert(type(client) == SteamClient)
     makedirs("./auth/", exist_ok=True)
-    if not used_login_key:
-        if not client.login_key:
-            print("Waiting for login key...")
-            client.wait_event(SteamClient.EVENT_NEW_LOGIN_KEY)
-        print("Writing login key...")
-        with open("./auth/" + client.username + ".txt", "w") as f:
-            f.write(client.login_key)
+    # if not used_login_key:
+    #     if not client.login_key:
+    #         print("Waiting for login key...")
+    #         client.wait_event(SteamClient.EVENT_NEW_LOGIN_KEY)
+    #     print("Writing login key...")
+    #     with open("./auth/" + client.username + ".txt", "w") as f:
+    #         f.write(client.login_key)
     with open("./auth/lastuser.txt", "w") as f:
         f.write(client.username)
 
