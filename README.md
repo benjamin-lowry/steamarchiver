@@ -4,6 +4,9 @@ A set of utilities to preserve Steam content, including tools to archive app
 information, archive depots in SteamPipe CDN content and extract them, and
 download versions of the Steam client.
 
+Patches and feedback can go to [the mailing
+list](https://lists.sr.ht/~blowry/steamarchiver).
+
 ## Usage
 
 For the Python scripts, install the requirements:
