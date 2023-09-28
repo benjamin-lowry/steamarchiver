@@ -24,7 +24,7 @@ def auto_login(client, username="", password="", fallback_anonymous=True, relogi
             while result in (EResult.AccountLogonDenied, EResult.InvalidLoginAuthCode):
                 result = client.login(username, login_key=login_key, auth_code=input("Enter email code: "))
             if result == EResult.OK: return post_login(client, used_login_key=True)
-        else:
+        elif password == "":
             print("Enter password for", username)
         client.cli_login(username, password) # fallback to CLI prompts if the above didn't work but we still have a specific username
         return post_login(client)
