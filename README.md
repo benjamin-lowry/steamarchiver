@@ -10,15 +10,22 @@ For the Python scripts, install the requirements:
 
 ``pip3 install -r requirements.txt``
 
+Many scripts require authentication, which can be passed on the command line
+using the ``-u [username]`` flag. ``-p [password]`` will allow you to pass the
+password on the command line as well; if you do not do this, you will be
+interactively prompted for a password.
+
 Usage for the Python scripts:
 
 - ``depot_archiver.py`` downloads depots (the logical groupings of game content
   files Steam delivers). You can give it an appid, in which case it'll download
   the latest depots for that app, or you can give it a specific appid, depotid,
   and manifest number (manifests are specific versions of depots.) It will
-  download the manifest, appinfo, and encrypted depot chunks. **You don't need
-  to own a game to archive its depots; you only need ownership to get the key
-  needed to actually extract files from the encrypted chunks.**
+  download the manifest, appinfo, and encrypted depot chunks. **Ownership of an
+  app is required to download its manifest; you can only download an app without
+  logging in if its manifest has previously been downloaded. Most (non-dedicated
+  server, non-Valve) free apps are not available to anonymous users; you will
+  still need to log into an account to download free games!**
 - ``get_depot_keys.py`` logs into a Steam account and dumps all the depot keys
   it has access to, which can be used to decrypt downloaded depots. To get the
   key for a depot, your account must own a package that includes access to the
@@ -58,8 +65,7 @@ Usage for the Python scripts:
   of the depot, and the change in on-disk size after download.
 - ``steam_websocket_mitm.py`` is an mitmproxy script to inspect Steam's
   WebSockets network traffic. This is only really useful for debugging.
-- ``login.py`` runs an interactive login and stores the credentials to be used
-  by another script.
+- ``login.py`` runs an interactive login for testing purposes.
 - ``chunkstore.py`` loads a .csd/.csm and lists the depot ID, encryption, and
   number of chunks without unpacking anything.
 
@@ -69,15 +75,19 @@ all the content you download in the formats these scripts expect. Just run the
 server with the folder the Python scripts are in as the working directory, and
 set a DNS record to point "lancache.steamcontent.com" to the IP of the server.
 
-For help finding appids, depotids, and manifests, check out
-https://steamdb.info
+For help finding appids, depotids, and manifestids, check out
+https://steamdb.info (requires logging in with a non-limited Steam account to
+view older manifests)
 
 ## Example
 
-Get all the depot keys for your account (interactive login prompt will be
-shown):
+Get all the depot keys available to anonymous users:
 
     python3 get_depot_keys.py
+
+Log into a specific account and get all its depot keys:
+
+    python3 get_depot_keys.py -u [username] -p [password]
 
 Download all the depots for Team Fortress 2:
 
@@ -98,7 +108,7 @@ Extract those binaries:
 
 ## License
 
-   Copyright 2021-2022 Benjamin Lowry
+   Copyright 2021-2023 Benjamin Lowry
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
