@@ -166,7 +166,12 @@ def try_load_manifest(appid, depotid, manifestid):
         while True:
             license_requested = False
             try:
-                manifest = c.get_manifest(appid, depotid, manifestid, decrypt=False, manifest_request_code=c.get_manifest_request_code(appid, depotid, manifestid))
+                request_code = c.get_manifest_request_code(appid, depotid, manifestid)
+                print("Obtained code", request_code, "for depot", depotid, "valid as of", datetime.now())
+                resp = c.cdn_cmd('depot', '%s/manifest/%s/5/%s' % (depotid, manifestid, request_code))
+                if not resp.ok:
+                    print("Got status code", resp.status_code, resp.reason, "trying to download depot", depotid, "manifest", manifestid)
+                    return False
                 break
             except SteamError as e:
                 if e.eresult == EResult.AccessDenied:
@@ -183,8 +188,8 @@ def try_load_manifest(appid, depotid, manifestid):
         print("Downloaded manifest %s" % manifestid)
         print("Saving manifest...") # write manifest to disk. this will be a standard Zip with protobuf data inside
         with open(dest, "wb") as f:
-            f.write(manifest.serialize())
-    return manifest
+            f.write(resp.content)
+        return CDNDepotManifest(c, appid, resp.content)
 
 def get_gid(manifest):
     if type(manifest) == str:
