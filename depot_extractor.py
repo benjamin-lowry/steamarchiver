@@ -31,6 +31,7 @@ from chunkstore import Chunkstore
 
 if __name__ == "__main__":
     path = "./depots/%s/" % args.depotid
+    keyfile = "./keys/%s.depotkey" % args.depotid
     manifest = None
     with open(path + "%s.zip" % args.manifestid, "rb") as f:
         manifest = DepotManifest(f.read())
@@ -39,7 +40,16 @@ if __name__ == "__main__":
         if manifest.filenames_encrypted:
             manifest.decrypt_filenames(args.depotkey)
     elif manifest.filenames_encrypted:
-            if exists("./depot_keys.txt"):
+            ## Using No-Intro's DepotKey format, which is
+            ## a 32-byte/256-bit binary file.
+            ## Examples require login to No-Intro to view.
+            if exists(keyfile):
+                with open(keyfile, "rb") as f:
+                    args.depotkey = f.read()
+                    manifest.decrypt_filenames(args.depotkey)
+            ## If depotkey is not found, locate depot_keys.txt
+            ## and check if key is located in there.
+            elif exists("./depot_keys.txt"):
                 with open("./depot_keys.txt", "r", encoding="utf-8") as f:
                     for line in f.read().split("\n"):
                         line = line.split("\t")
