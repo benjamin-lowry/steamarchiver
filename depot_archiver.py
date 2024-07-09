@@ -104,7 +104,7 @@ def archive_manifest(manifest, c, name="unknown", dry_run=False, server_override
                                 content = await response.content.read()
                                 break
                             elif 400 <= response.status < 500:
-                                print(f"error: received status code {response.status} (on chunk {chunk_str}, server {host})")
+                                print(f"\033[31merror: received status code {response.status} (on chunk {chunk_str}, server {host})\003[0m")
                                 return False
                     except Exception as e:
                         print("rotating to next server:", e)
@@ -160,8 +160,8 @@ def try_load_manifest(appid, depotid, manifestid):
     makedirs("./depots/%s" % depotid, exist_ok=True)
     if path.exists(dest):
         with open(dest, "rb") as f:
-            manifest = CDNDepotManifest(c, appid, f.read())
             print("Loaded cached manifest %s from disk" % manifestid)
+            return CDNDepotManifest(c, appid, f.read())
     else:
         while True:
             license_requested = False
@@ -218,18 +218,18 @@ if __name__ == "__main__":
     if args.workshop_id:
         response = steam_client.send_um_and_wait("PublishedFile.GetDetails#1", {'publishedfileids':[args.workshop_id]})
         if response.header.eresult != EResult.OK:
-            print("error: couldn't get workshop item info:", response.header.error_message)
+            print("\033[31merror: couldn't get workshop item info:\033[0m", response.header.error_message)
             exit(1)
         file = response.body.publishedfiledetails[0]
         if file.result != EResult.OK:
-            print("error: steam returned error", EResult(file.result))
+            print("\033[31merror: steam returned error\033[0m", EResult(file.result))
             exit(1)
         print("Retrieved data for workshop item", file.title, "for app", file.consumer_appid, "(%s)" % file.app_name)
         if not file.hcontent_file:
-            print("error: workshop item is not on SteamPipe")
+            print("\033[31merror: workshop item is not on SteamPipe\033[0m")
             exit(1)
         if file.file_url:
-            print("error: workshop item is not on SteamPipe: its download URL is", file.file_url)
+            print("\033[31merror: workshop item is not on SteamPipe: its download URL is\033[0m", file.file_url)
             exit(1)
         archive_manifest(try_load_manifest(file.consumer_appid, file.consumer_appid, file.hcontent_file), c, file.title, args.dry_run, args.server, args.backup)
         exit(0)
@@ -251,7 +251,7 @@ if __name__ == "__main__":
                 if changenumber > highest_changenumber:
                     highest_changenumber = changenumber
             if highest_changenumber == 0:
-                print("error: -l flag specified, but no local appinfo exists for app", appid)
+                print("\033[31merror: -l flag specified, but no local appinfo exists for app\033[0m", appid)
                 exit(1)
             appinfo_path = "./appinfo/%s_%s.vdf" % (appid, highest_changenumber)
         else:
