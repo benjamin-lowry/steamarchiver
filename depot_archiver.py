@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 from argparse import ArgumentParser
 from asyncio import run, gather, sleep
-from binascii import hexlify
+from binascii import hexlify, unhexlify
 from datetime import datetime
 from math import ceil
 from os import makedirs, path, listdir, remove
@@ -12,6 +12,8 @@ if __name__ == "__main__": # exit before we import our shit if the args are wron
     dl_group = parser.add_mutually_exclusive_group()
     dl_group.add_argument("-a", type=int, dest="downloads", metavar=("appid","depotid"), action="append", nargs='+', help="App, depot, and manifest ID to download. If the manifest ID is omitted, the lastest manifest specified by the public branch will be downloaded.\nIf the depot ID is omitted, all depots specified by the public branch will be downloaded.")
     dl_group.add_argument("-w", type=int, nargs='?', help="Workshop file ID to download.", dest="workshop_id")
+    # parser.add_argument("-r", type=str, nargs='?', help="Branch Name.", dest="branch")
+    # parser.add_argument("-w", type=str, nargs='?', help="Branch Password", dest="bpassword")
     parser.add_argument("-b", help="Download into a Steam backup file instead of storing the chunks individually", dest="backup", action="store_true")
     parser.add_argument("-d", help="Dry run: download manifest (file metadata) without actually downloading files", dest="dry_run", action="store_true")
     parser.add_argument("-l", help="Use latest local appinfo instead of trying to download", dest="local_appinfo", action="store_true")
@@ -33,10 +35,19 @@ if __name__ == "__main__": # exit before we import our shit if the args are wron
         print("must specify only app or workshop item, not both")
         parser.print_help()
         exit(1)
+    # if args.branch and args.workshop_id:
+    #     print("The Workshop doesn't have branches. Unable to continue")
+    #     parser.print_help()
+    #     exit(1)
+    # if args.branch and not args.bpassword:
+    #     print("You need a password in order to download from a non-Public Branch")
+    #     parser.print_help()
+    #     exit(1)
 
 from steam.client import SteamClient
 from steam.client.cdn import CDNClient, CDNDepotManifest
 from steam.core.msg import MsgProto
+# from steam.core.crypto import symmetric_decrypt
 from steam.enums import EResult
 from steam.enums.emsg import EMsg
 from steam.exceptions import SteamError
@@ -104,7 +115,7 @@ def archive_manifest(manifest, c, name="unknown", dry_run=False, server_override
                                 content = await response.content.read()
                                 break
                             elif 400 <= response.status < 500:
-                                print(f"\033[31merror: received status code {response.status} (on chunk {chunk_str}, server {host})\003[0m")
+                                print(f"\033[31merror: received status code {response.status} (on chunk {chunk_str}, server {host})\033[0m")
                                 return False
                     except Exception as e:
                         print("rotating to next server:", e)
@@ -199,6 +210,70 @@ def get_gid(manifest):
     else:
         return manifest["gid"]
 
+def get_depotkeys(app, depot):
+    # key_text = False
+    key_binary = False
+    keyfile = "./keys/%s.depotkey" % depot
+    # keys_saved = []
+    # key = 0
+    # Checking if either depot key within depot_key.txt or the depot's binary key file exists
+    # if path.exists("./depot_keys.txt"):
+    #     with open("./depot_keys.txt", "r", encoding="utf-8") as f:
+    #         for line in f.read().split("\n"):
+    #             try:
+    #                 keys_saved.append(int((line.split("\t")[0])))
+    #             except ValueError:
+    #                 pass
+    #         for line in keys_saved:
+    #             try:
+					# Keep getting TypeError: 'int' object is not subscriptable
+					# Disabled all portions the read/write text file until fixed.
+    #                 if int(line[0]) == depot:
+    #                     key = bytes.fromhex(line[2])
+    #                     key_text = True
+    #                     break
+    #             except ValueError:
+    #                 pass
+    #     # print("%s keys already saved in depot_keys.txt" % len(keys_saved))
+    if path.exists(keyfile):
+        key_binary = True
+    
+    # If neither exist
+    if not key_binary:
+        try:
+            key = steam_client.get_depot_key(app, depot).depot_encryption_key
+        except AttributeError:
+            print("error getting key for depot", depot)
+        with open(keyfile, "wb") as f:
+            try:
+                f.write(key)
+            except Exception as e:
+                print("\033[31mError writing key file:\033[0m", e)
+            f.close()
+        return
+    
+    # If the text file exists but not the binary
+    # grab it from the text file and write it to the binary
+    # if key_text and not key_binary:
+    #     with open(keyfile, "wb") as f:
+    #         try:
+    #             f.write(key)
+    #         except Exception as e:
+    #             print("\033[31mError writing to binary key file.\033[0m", e)
+    #     return
+    
+    # If the binary file exists but not the text
+    # grab it from the binary and write it to the text file
+    # if key_binary and not key_text:
+    #     with open(keyfile, "rb") as f:
+    #         key = f.read()
+    #     with open("./depot_keys.txt", "a", encoding="utf-8", newline="\n") as f:
+    #         if key != b'':
+    #             key_hex = hexlify(key).decode()
+    #             f.write("%s\t\t%s" % (depot, key_hex) + "\n")
+    #             print("%s\t\t%s" % (depot, key_hex))
+    #     return
+
 if __name__ == "__main__":
     # Create directories
     makedirs("./appinfo", exist_ok=True)
@@ -290,9 +365,20 @@ if __name__ == "__main__":
 
         if depotid:
             name = appinfo['depots'][str(depotid)]['name'] if 'name' in appinfo['depots'][str(depotid)] else 'unknown'
+            get_depotkeys(appid, depotid)
             if manifestid:
                 print("Archiving", appinfo['common']['name'], "depot", depotid, "manifest", manifestid)
                 exit_status += (0 if archive_manifest(try_load_manifest(appid, depotid, manifestid), c, name, args.dry_run, args.server, args.backup) else 1)
+            # elif args.branch:
+            #     try:
+            #         encrypted_manifest = get_gid(appinfo['depots'][str(depotid)]['manifests'][args.branch])
+            #         branch_key = c.check_beta_password(appid,args.bpassword)
+            #         manifestid = symmetric_decrypt(unhexlify(encrypted_manifest),branch_key[args.branch])
+            #         print("Archiving", appinfo['common']['name'], "depot", depotid, "branch", args.branch, "manifest", manifestid)
+            #         exit_status += (0 if archive_manifest(try_load_manifest(appid, depotid, manifestid), c, name, args.dry_run, args.server, args.backup) else 1)
+            #     except SteamError as e:
+            #         print(f"Error:", e)
+            #         exit(1)
             else:
                 manifest = get_gid(appinfo['depots'][str(depotid)]['manifests']['public'])
                 print("Archiving", appinfo['common']['name'], "depot", depotid, "manifest", manifest)
@@ -300,6 +386,7 @@ if __name__ == "__main__":
         else:
             print("Archiving all latest depots for", appinfo['common']['name'], "build", appinfo['depots']['branches']['public']['buildid'])
             for depot in appinfo["depots"]:
+                get_depotkeys(appid, depot)
                 depotinfo = appinfo["depots"][depot]
                 if not "manifests" in depotinfo or not "public" in depotinfo["manifests"]:
                     continue

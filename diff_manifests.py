@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 from argparse import ArgumentParser
 from binascii import unhexlify, hexlify
-from datetime import datetime
+from datetime import datetime, timezone
 from os.path import exists
 from steam.core.manifest import DepotManifest
 from sys import stderr
@@ -51,7 +51,7 @@ if __name__ == "__main__":
                 old_size_original += chunk.cb_original
                 old_size_compressed += chunk.cb_compressed
     if not args.quiet:
-        print(f"Comparing depot {args.depotid} old version {old.gid} ({datetime.utcfromtimestamp(old.creation_time)}) with new version {new.gid} ({datetime.utcfromtimestamp(new.creation_time)})")
+        print(f"Comparing depot {args.depotid} old version {old.gid} ({datetime.fromtimestamp(old.creation_time, timezone.utc).strftime('%Y-%m-%d %H:%M:%S')}) with new version {new.gid} ({datetime.fromtimestamp(new.creation_time, timezone.utc).strftime('%Y-%m-%d %H:%M:%S')})")
         print("List of changed files:")
     num_new_chunks, size_new_chunks = 0, 0
     num_reused_chunks, size_reused_chunks = 0, 0
@@ -108,4 +108,4 @@ if __name__ == "__main__":
         print(f"{format_bytes(size_new_chunks)} added in {num_new_chunks} {'chunk' if num_new_chunks == 1 else 'chunks'}")
         print(f"{format_bytes(size_reused_chunks)} reused in {num_reused_chunks} {'chunk' if num_reused_chunks == 1 else 'chunks'}")
         print(f"{format_bytes(size_deleted_chunks)} deleted in {num_deleted_chunks} {'chunk' if num_deleted_chunks == 1 else 'chunks'}")
-        print(f"End diff of depot {args.depotid} old version {old.gid} ({datetime.utcfromtimestamp(old.creation_time)}) with new version {new.gid} ({datetime.utcfromtimestamp(new.creation_time)})")
+        print(f"End diff of depot {args.depotid} old version {old.gid} ({datetime.fromtimestamp(old.creation_time, timezone.utc).strftime('%Y-%m-%d %H:%M:%S')}) with new version {new.gid} ({datetime.fromtimestamp(new.creation_time, timezone.utc).strftime('%Y-%m-%d %H:%M:%S')})")        
