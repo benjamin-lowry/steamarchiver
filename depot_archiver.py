@@ -7,14 +7,18 @@ from math import ceil
 from os import makedirs, path, listdir, remove
 from sys import argv
 
+# import logging
+# logging.basicConfig(level=logging.DEBUG)
+
 if __name__ == "__main__": # exit before we import our shit if the args are wrong
     parser = ArgumentParser(description='Download Steam content depots for archival. Downloading apps: Specify an app to download all the depots for that app, or an app and depot ID to download the latest version of that depot (or a specific version if the manifest ID is specified.) Downloading workshop items: Use the -w flag to specify the ID of the workshop file to download. Exit code is 0 if all downloads succeeded, or the number of failures if at least one failed.')
     dl_group = parser.add_mutually_exclusive_group()
     dl_group.add_argument("-a", type=int, dest="downloads", metavar=("appid","depotid"), action="append", nargs='+', help="App, depot, and manifest ID to download. If the manifest ID is omitted, the lastest manifest specified by the public branch will be downloaded.\nIf the depot ID is omitted, all depots specified by the public branch will be downloaded.")
     dl_group.add_argument("-w", type=int, nargs='?', help="Workshop file ID to download.", dest="workshop_id")
-    # parser.add_argument("-r", type=str, nargs='?', help="Branch Name.", dest="branch")
-    # parser.add_argument("-w", type=str, nargs='?', help="Branch Password", dest="bpassword")
+    parser.add_argument("-r", type=str, nargs='?', help="Branch Name.", dest="branch")
+    parser.add_argument("-n", type=str, nargs='?', help="Branch Password", dest="bpassword")
     parser.add_argument("-b", help="Download into a Steam backup file instead of storing the chunks individually", dest="backup", action="store_true")
+    # parser.add_argument("--redownload", help="Redownloads all files, regardless if it is good or bad.", action="store_true")
     parser.add_argument("-d", help="Dry run: download manifest (file metadata) without actually downloading files", dest="dry_run", action="store_true")
     parser.add_argument("-l", help="Use latest local appinfo instead of trying to download", dest="local_appinfo", action="store_true")
     parser.add_argument("-c", type=int, help="Number of concurrent downloads to perform at once, default 10", dest="connection_limit", default=10)
@@ -35,19 +39,19 @@ if __name__ == "__main__": # exit before we import our shit if the args are wron
         print("must specify only app or workshop item, not both")
         parser.print_help()
         exit(1)
-    # if args.branch and args.workshop_id:
-    #     print("The Workshop doesn't have branches. Unable to continue")
-    #     parser.print_help()
-    #     exit(1)
-    # if args.branch and not args.bpassword:
-    #     print("You need a password in order to download from a non-Public Branch")
-    #     parser.print_help()
-    #     exit(1)
+    if args.branch and args.workshop_id:
+        print("The Workshop doesn't have branches. Unable to continue")
+        parser.print_help()
+        exit(1)
+    if args.branch and not args.bpassword:
+        print("You need a password in order to download from a non-Public Branch")
+        parser.print_help()
+        exit(1)
 
 from steam.client import SteamClient
 from steam.client.cdn import CDNClient, CDNDepotManifest
 from steam.core.msg import MsgProto
-# from steam.core.crypto import symmetric_decrypt
+from steam.core.crypto import symmetric_decrypt_ecb
 from steam.enums import EResult
 from steam.enums.emsg import EMsg
 from steam.exceptions import SteamError
@@ -87,11 +91,14 @@ def archive_manifest(manifest, c, name="unknown", dry_run=False, server_override
         server = servers[0]
         async with ClientSession() as session:
             for index, chunk in enumerate(chunks):
+                # chunkstr = hexlify(chunk).decode()
+                # dest = dest + chunkstr[:3] + "/" + chunkstr[3:6] + "/"
                 if path.exists(dest + hexlify(chunk).decode()) or (chunkstore and (chunk in chunkstore.chunks.keys())):
                     download_state.chunks_skipped += 1
                     del chunks[index]
             for chunk in chunks:
                 chunk_str = hexlify(chunk).decode()
+                # dest = dest + chunk_str[:3] + "/" + chunk_str[3:6] + "/"
                 if path.exists(dest + chunk_str) or (chunkstore and (chunk in chunkstore.chunks.keys())):
                     download_state.chunks_skipped += 1
                     continue
@@ -165,7 +172,7 @@ def archive_manifest(manifest, c, name="unknown", dry_run=False, server_override
     print("Downloaded %s %s and skipped %s" % (download_state.chunks_dled, "chunk" if download_state.chunks_dled == 1 else "chunks", download_state.chunks_skipped))
     return True
 
-def try_load_manifest(appid, depotid, manifestid):
+def try_load_manifest(appid, depotid, manifestid, branch='public', password=None):
     print(f"Getting a manifest for app {appid} depot {depotid} gid {manifestid}")
     dest = "./depots/%s/%s.zip" % (depotid, manifestid)
     makedirs("./depots/%s" % depotid, exist_ok=True)
@@ -177,7 +184,7 @@ def try_load_manifest(appid, depotid, manifestid):
         while True:
             license_requested = False
             try:
-                request_code = c.get_manifest_request_code(appid, depotid, manifestid)
+                request_code = c.get_manifest_request_code(appid, depotid, manifestid, branch, password)
                 print("Obtained code", request_code, "for depot", depotid, "valid as of", datetime.now())
                 resp = c.cdn_cmd('depot', '%s/manifest/%s/5/%s' % (depotid, manifestid, request_code))
                 if not resp.ok:
@@ -209,6 +216,32 @@ def get_gid(manifest):
         return manifest
     else:
         return manifest["gid"]
+
+## Steam's own function, check_beta_password, will always only return resp.eresult.
+## It never returns the beta_passwords.
+def beta_check_password(app_id, password, c):
+    """Check branch beta password to unlock encrypted branches
+
+    :param app_id: App ID
+    :type  app_id: int
+    :param password: beta password
+    :type  password: str
+    :returns: result
+    :rtype: :class:`.EResult`
+    """
+    beta_passwords = {}
+    resp = c.steam.send_job_and_wait(MsgProto(EMsg.ClientCheckAppBetaPassword),
+                                        {'app_id': app_id, 'betapassword': password})
+
+    if resp.eresult == EResult.OK:
+        print("Unlocked following beta branches: ",
+                        ', '.join(map(lambda x: x.betaname.lower(), resp.betapasswords)))
+        for entry in resp.betapasswords:
+            beta_passwords[(app_id, entry.betaname.lower())] = unhexlify(entry.betapassword)
+            return beta_passwords
+    else:
+        print("App beta password check failed. %r" % EResult(resp.eresult))
+        return EResult(resp.eresult)
 
 def get_depotkeys(app, depot):
     # key_text = False
@@ -369,16 +402,16 @@ if __name__ == "__main__":
             if manifestid:
                 print("Archiving", appinfo['common']['name'], "depot", depotid, "manifest", manifestid)
                 exit_status += (0 if archive_manifest(try_load_manifest(appid, depotid, manifestid), c, name, args.dry_run, args.server, args.backup) else 1)
-            # elif args.branch:
-            #     try:
-            #         encrypted_manifest = get_gid(appinfo['depots'][str(depotid)]['manifests'][args.branch])
-            #         branch_key = c.check_beta_password(appid,args.bpassword)
-            #         manifestid = symmetric_decrypt(unhexlify(encrypted_manifest),branch_key[args.branch])
-            #         print("Archiving", appinfo['common']['name'], "depot", depotid, "branch", args.branch, "manifest", manifestid)
-            #         exit_status += (0 if archive_manifest(try_load_manifest(appid, depotid, manifestid), c, name, args.dry_run, args.server, args.backup) else 1)
-            #     except SteamError as e:
-            #         print(f"Error:", e)
-            #         exit(1)
+            elif args.branch:
+                try:
+                    encrypted_manifest = get_gid(appinfo['depots'][str(depotid)]['encryptedmanifests'][args.branch])
+                    branch_key = beta_check_password(appid, args.bpassword, c)
+                    manifestid = int.from_bytes(symmetric_decrypt_ecb(unhexlify(encrypted_manifest),branch_key[(appid, args.branch)]),byteorder='little')
+                    print("Archiving", appinfo['common']['name'], "depot", depotid, "branch", args.branch, "manifest", manifestid)
+                    exit_status += (0 if archive_manifest(try_load_manifest(appid, depotid, manifestid, args.branch, args.bpassword), c, name, args.dry_run, args.server, args.backup) else 1)
+                except SteamError as e:
+                    print(f"Error:", e)
+                    exit(1)
             else:
                 manifest = get_gid(appinfo['depots'][str(depotid)]['manifests']['public'])
                 print("Archiving", appinfo['common']['name'], "depot", depotid, "manifest", manifest)

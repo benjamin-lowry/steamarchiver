@@ -14,6 +14,7 @@ if __name__ == "__main__":
     parser.add_argument("-q", action="store_true", help="quiet: only output errors and names of added or modified files", dest="quiet")
     parser.add_argument("-d", action="store_true", help="detailed: print the sha1 checksums of added/removed chunks", dest="detailed")
     args = parser.parse_args()
+    keyfile = "./keys/%s.depotkey" % args.depotid
     oldpath = f"./depots/{args.depotid}/{args.old}.zip"
     newpath = f"./depots/{args.depotid}/{args.new}.zip"
     if not exists(oldpath):
@@ -27,14 +28,18 @@ if __name__ == "__main__":
     with open(newpath, "rb") as f:
         new = DepotManifest(f.read())
     if (old.filenames_encrypted or new.filenames_encrypted):
-        if exists("./depot_keys.txt"):
+        if exists(keyfile):
+            with open(keyfile, "rb") as f:
+                key = f.read()
+        elif exists("./depot_keys.txt"):
             with open("./depot_keys.txt", "r", encoding="utf-8") as f:
                 for line in f.read().split("\n"):
                     line = line.split("\t")
                     if line[0] == str(args.depotid):
                         key = unhexlify(line[2])
-                        old.decrypt_filenames(key)
-                        new.decrypt_filenames(key)
+        if key:
+            old.decrypt_filenames(key)
+            new.decrypt_filenames(key)
         if (old.filenames_encrypted or new.filenames_encrypted):
             print("unable to decrypt filenames, missing depot key", file=stderr)
             exit(1)
