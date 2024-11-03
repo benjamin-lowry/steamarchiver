@@ -74,8 +74,8 @@ def auto_login(client, username="", password="", fallback_anonymous=True, relogi
         #         json.dump(credentials, f, indent=4)
         
         return post_login(client)
-    if username == "" and exists("./auth/credentials.json") and relogin:
-        with open("./auth/credentials.json", "r") as f: credentials = json.load(f)
+    if username == "" and exists(keypath) and relogin:
+        with open(keypath, "r") as f: credentials = json.load(f)
         client.login(credentials['username'], access_token=credentials['refresh_token'])
         return post_login(client)
     # if no username, fall back to either anonymous or CLI login based on fallback_anonymous
