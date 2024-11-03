@@ -186,7 +186,7 @@ def try_load_manifest(appid, depotid, manifestid, branch='public', password=None
             try:
                 request_code = c.get_manifest_request_code(appid, depotid, manifestid, branch, password)
                 print("Obtained code", request_code, "for depot", depotid, "valid as of", datetime.now())
-                resp = c.cdn_cmd('depot', '%s/manifest/%s/5/%s' % (depotid, manifestid, request_code))
+                resp = c.cdn_cmd('depot', '%s/manifest/%s/5/%s' % (depotid, manifestid, request_code), appid, depotid)
                 if not resp.ok:
                     print("Got status code", resp.status_code, resp.reason, "trying to download depot", depotid, "manifest", manifestid)
                     return False
