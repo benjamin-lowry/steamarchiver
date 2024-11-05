@@ -14,6 +14,7 @@ def auto_login(client, username="", password="", fallback_anonymous=True, relogi
     
     webauth = wa.WebAuth()
     
+    keypath = "./auth/credentials.json"
     ## If we are not signing in and doing anonymous access
     if username == "anonymous":
         client.anonymous_login()
@@ -32,7 +33,6 @@ def auto_login(client, username="", password="", fallback_anonymous=True, relogi
             webauth.login(code=input("Enter Email Code: "))
         
         # We are setting the auth file for refresh token storage
-        keypath = "./auth/credentials.json"
         if exists(keypath):
             with open(keypath) as f:
                 credentials = json.load(f)

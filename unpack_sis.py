@@ -11,38 +11,48 @@ from vdf import loads
 from chunkstore import Chunkstore
 
 def unpack_chunkstore(target, key=None, key_hex=None):
-        if key == True:
-            key, key_hex = find_key(depot)
         chunkstore = Chunkstore(target)
+        if key == True:
+            key, key_hex = find_key(chunkstore.depot)
         with open(chunkstore.csdname, "rb") as csdfile:
             def unpacker(chunkstore, sha, offset, length):
-                print("extracting chunk %s from offset %s in file %s" % (hexlify(sha).decode(), offset, target + ".csd"))
+                # print("extracting chunk %s from offset %s in file %s" % (hexlify(sha).decode(), offset, target + ".csd"))
                 csdfile.seek(offset)
                 if key:
-                    with open("./depots/%s/%s" % (chunkstore.depot, hexlify(sha).decode()), "wb") as f:
-                        print("writing %s bytes re-encrypted using key %s and random IV" % (length, key_hex))
-                        f.write(symmetric_encrypt(csdfile.read(length), key))
+                    if not path.exists("./depots/%s/%s" % (chunkstore.depot, hexlify(sha).decode())):
+                        print("extracting chunk %s from offset %s in file %s" % (hexlify(sha).decode(), offset, target + ".csd"))
+                        with open("./depots/%s/%s" % (chunkstore.depot, hexlify(sha).decode()), "wb") as f:
+                            print("writing %s bytes re-encrypted using key %s and random IV" % (length, key_hex))
+                            f.write(symmetric_encrypt(csdfile.read(length), key))
                 elif chunkstore.is_encrypted:
-                    with open("./depots/%s/%s" % (chunkstore.depot, hexlify(sha).decode()), "wb") as f:
-                        print("writing %s bytes encrypted" % length)
-                        f.write(csdfile.read(length))
+                    if not path.exists("./depots/%s/%s" % (chunkstore.depot, hexlify(sha).decode())):
+                        print("extracting chunk %s from offset %s in file %s" % (hexlify(sha).decode(), offset, target + ".csd"))
+                        with open("./depots/%s/%s" % (chunkstore.depot, hexlify(sha).decode()), "wb") as f:
+                            print("writing %s bytes encrypted" % length)
+                            f.write(csdfile.read(length))
                 else:
-                    with open("./depots/%s/%s_decrypted" % (chunkstore.depot, hexlify(sha).decode()), "wb") as f:
-                        print("writing %s bytes unencrypted" % length)
-                        f.write(csdfile.read(length))
+                    if not path.exists("./depots/%s/%s_decrypted" % (chunkstore.depot, hexlify(sha).decode())):
+                        print("extracting chunk %s from offset %s in file %s" % (hexlify(sha).decode(), offset, target + ".csd"))
+                        with open("./depots/%s/%s_decrypted" % (chunkstore.depot, hexlify(sha).decode()), "wb") as f:
+                            print("writing %s bytes unencrypted" % length)
+                            f.write(csdfile.read(length))
             makedirs("./depots/%s" % chunkstore.depot, exist_ok=True)
             chunkstore.unpack(unpacker)
 
 def find_key(depot):
-    if path.exists("./depot_keys.txt"):
+    if path.exists(f"./keys/{depot}.depotkey"):
+        with open(f"./keys/{depot}.depotkey", "rb") as f:
+            return unhexlify(f.read()), f.read()
+    elif path.exists("./depot_keys.txt"):
         with open("./depot_keys.txt", "r", encoding="utf-8") as f:
             for line in f.read().split("\n"):
                 line = line.split("\t")
                 if line[0] == depot:
                     key_hex = line[2]
                     return unhexlify(key_hex), key_hex
-    if not key:
+    else:
         print("couldn't find key for depot", depot)
+        exit(1)
 
 def unpack_sis(sku, chunkstore_path, use_key = False):
     need_manifests = {}

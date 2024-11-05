@@ -24,9 +24,13 @@ if __name__ == "__main__": # exit before we import our shit if the args are wron
     parser.add_argument('depotkey', type=str, nargs='?')
     parser.add_argument('-b', dest="backup", help="Path to a .csd backup file to review (the manifest must also be present in the depots folder)", nargs='?')
     # parser.add_argument('-f', dest="files", help="List files to review (can be used multiple times); if ommitted, all files will be examined. Glob matching supported.", action="append")
-    # parser.add_argument('-m', dest="manifests", htlp="Uses the existing manifests to validate the files")
+    parser.add_argument('-m', dest="manifests", htlp="Uses the existing manifests to validate the files")
     parser.add_argument('-t', type=int, default=1, dest="threads", help="specifies the number of threads to use for processing the files")
     args = parser.parse_args()
+    if args.backup and args.manifests:
+        print("At this time, backup and manifest filtering can not be used together.")
+        parser.print_help()
+        exit(1)
 
 from steam.core.manifest import DepotManifest
 from steam.core.crypto import symmetric_decrypt
@@ -143,27 +147,23 @@ if __name__ == "__main__":
                 chunks[chunk] = _
                 chunks_by_store[chunk] = csm
             chunkstores[csm] = chunkstore
+    elif args.manifests:
+        manifestChunks = []
+        manifestFiles = [data.name for data in scandir(path) if data.is_file()
+        and data.name.endswith(".zip")]
+        for eachManifest in manifestFiles:
+            with open(path + "%s.zip" % eachManifest, "rb") as f:
+                manifest = DepotManifest(f.read())
+                if manifest.filenames_encrypted:
+                    manifest.decrypt_filenames(args.depotkey)
+                for files in manifest.iter_files():
+                    for chunk in sorted(files.chunks, key = lambda chunk: chunk.offset):
+                        manifestChunks.append(chunk.sha)
+        for name in manifestChunks: chunks[name] = 0
     else:
         chunkFiles = [data.name for data in scandir(path) if data.is_file()
         and not data.name.endswith(".zip")]
         for name in chunkFiles: chunks[name] = 0
-
-    # print(f"{len(chunks)}")
-    dir_size = len(chunks)
-
-    # if args.manifests:
-    #     manifestChunks = []
-    #     manifestFiles = [data.name for data in scandir(path) if data.is_file()
-    #     and data.name.endswith(".zip")]
-    #     for eachManifest in manifestFiles:
-    #         with open(path + "%s.zip" % eachManifest, "rb") as f:
-    #             manifest = DepotManifest(f.read())
-    #             if manifest.filenames_encrypted:
-    #                 manifest.decrypt_filenames(args.depotkey)
-    #             for files in manifest.iter_files():
-    #                 for chunk in files.chunks:
-    #                     manifestChunks.append(chunk.strip())
-    #     unique_files = sorted(list(set(manifestChunks)))
         
     #    if len(chunks) > len(unique_files):
     #         print("There are more chunks than needed.")

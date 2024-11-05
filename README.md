@@ -5,7 +5,12 @@ information, archive depots in SteamPipe CDN content and extract them, and
 download versions of the Steam client.
 
 Patches and feedback can go to [the mailing
-list](https://lists.sr.ht/~blowry/steamarchiver).
+list](https://lists.sr.ht/~technomage6/steamarchiver).
+
+This is a Fork of [Steam Archive](https://git.sr.ht/~blowry/steamarchiver) by Blowry.
+
+Special credit goes to [SolsticeGameStudio](https://github.com/solsticegamestudios/steam)
+for maintaining a current fork of the ValvePython library and keeping it current.
 
 ## Usage
 
@@ -29,6 +34,8 @@ Usage for the Python scripts:
   logging in if its manifest has previously been downloaded. Most (non-dedicated
   server, non-Valve) free apps are not available to anonymous users; you will
   still need to log into an account to download free games!**
+  ``depot_validator.py`` verifies every chunk in a depot folder to ensure none of
+  the files are corrupted or bad.
 - ``get_depot_keys.py`` logs into a Steam account and dumps all the depot keys
   it has access to, which can be used to decrypt downloaded depots. To get the
   key for a depot, your account must own a package that includes access to the
