@@ -202,6 +202,9 @@ def try_load_manifest(appid, depotid, manifestid, branch='public', password=None
                     print(e.message)
                     print(f"Use the -i flag to log into a Steam account with access to this depot, or place a downloaded copy of the manifest at depots/{depotid}/{manifestid}.zip")
                     return False
+                if e.eresult == EResult.RateLimitExceeded:
+                    print("Unable to download. Rate Limit Exceeded")
+                    return False
                 else:
                     print(e.message + ": " + str(e.eresult))
                     return False
@@ -312,132 +315,129 @@ def get_depotkeys(app, depot):
     #     return
 
 if __name__ == "__main__":
-    try:
-        # Create directories
-        makedirs("./appinfo", exist_ok=True)
-        makedirs("./depots", exist_ok=True)
+    # Create directories
+    makedirs("./appinfo", exist_ok=True)
+    makedirs("./depots", exist_ok=True)
 
-        steam_client = SteamClient()
-        print("Connecting to the Steam network...")
-        steam_client.connect()
-        print("Logging in...")
-        if args.interactive:
-            auto_login(steam_client, fallback_anonymous=False, relogin=False)
-        elif args.username:
-            auto_login(steam_client, args.username, args.password)
-        elif args.anon:
-            auto_login(steam_client, fallback_anonymous=True)
+    steam_client = SteamClient()
+    print("Connecting to the Steam network...")
+    steam_client.connect()
+    print("Logging in...")
+    if args.interactive:
+        auto_login(steam_client, fallback_anonymous=False, relogin=False)
+    elif args.username:
+        auto_login(steam_client, args.username, args.password)
+    elif args.anon:
+        auto_login(steam_client, fallback_anonymous=True)
+    else:
+        auto_login(steam_client)
+    c = CDNClient(steam_client)
+
+    if args.workshop_id:
+        response = steam_client.send_um_and_wait("PublishedFile.GetDetails#1", {'publishedfileids':[args.workshop_id]})
+        if response.header.eresult != EResult.OK:
+            print("\033[31merror: couldn't get workshop item info:\033[0m", response.header.error_message)
+            exit(1)
+        file = response.body.publishedfiledetails[0]
+        if file.result != EResult.OK:
+            print("\033[31merror: steam returned error\033[0m", EResult(file.result))
+            exit(1)
+        print("Retrieved data for workshop item", file.title, "for app", file.consumer_appid, "(%s)" % file.app_name)
+        if not file.hcontent_file:
+            print("\033[31merror: workshop item is not on SteamPipe\033[0m")
+            exit(1)
+        if file.file_url:
+            print("\033[31merror: workshop item is not on SteamPipe: its download URL is\033[0m", file.file_url)
+            exit(1)
+        archive_manifest(try_load_manifest(file.consumer_appid, file.consumer_appid, file.hcontent_file), c, file.title, args.dry_run, args.server, args.backup)
+        exit(0)
+
+    # Iterate over all the downloads we want
+    exit_status = 0
+    for dl_tuple in args.downloads:
+        appid = dl_tuple[0]
+        depotid = (dl_tuple[1] if len(dl_tuple) > 1 else None)
+        manifestid = (dl_tuple[2] if len(dl_tuple) > 2 else None)
+
+        # Fetch appinfo
+        if args.local_appinfo:
+            highest_changenumber = 0
+            for file in listdir("./appinfo/"):
+                if not file.endswith(".vdf"): continue
+                if not file.startswith(str(appid) + "_"): continue
+                changenumber = int(file.split("_")[1].replace(".vdf", ""))
+                if changenumber > highest_changenumber:
+                    highest_changenumber = changenumber
+            if highest_changenumber == 0:
+                print("\033[31merror: -l flag specified, but no local appinfo exists for app\033[0m", appid)
+                exit(1)
+            appinfo_path = "./appinfo/%s_%s.vdf" % (appid, highest_changenumber)
         else:
-            auto_login(steam_client)
-        c = CDNClient(steam_client)
-        if args.workshop_id:
-            response = steam_client.send_um_and_wait("PublishedFile.GetDetails#1", {'publishedfileids':[args.workshop_id]})
-            if response.header.eresult != EResult.OK:
-                print("\033[31merror: couldn't get workshop item info:\033[0m", response.header.error_message)
-                exit(1)
-            file = response.body.publishedfiledetails[0]
-            if file.result != EResult.OK:
-                print("\033[31merror: steam returned error\033[0m", EResult(file.result))
-                exit(1)
-            print("Retrieved data for workshop item", file.title, "for app", file.consumer_appid, "(%s)" % file.app_name)
-            if not file.hcontent_file:
-                print("\033[31merror: workshop item is not on SteamPipe\033[0m")
-                exit(1)
-            if file.file_url:
-                print("\033[31merror: workshop item is not on SteamPipe: its download URL is\033[0m", file.file_url)
-                exit(1)
-            archive_manifest(try_load_manifest(file.consumer_appid, file.consumer_appid, file.hcontent_file), c, file.title, args.dry_run, args.server, args.backup)
-            exit(0)
+            print(f"Is the client logged in? {steam_client.logged_on}")
+            print("Fetching appinfo for", appid)
+            tokens = steam_client.get_access_tokens(app_ids=[appid])
+            msg = MsgProto(EMsg.ClientPICSProductInfoRequest)
+            body_app = msg.body.apps.add()
+            body_app.appid = appid
+            if 'apps' in tokens.keys() and appid in tokens['apps'].keys():
+                body_app.access_token = tokens['apps'][appid]
+            appinfo_response = steam_client.wait_event(steam_client.send_job(msg))[0].body.apps[0]
+            changenumber = appinfo_response.change_number
+            # Write vdf appinfo to disk
+            appinfo_path = "./appinfo/%s_%s.vdf" % (appid, changenumber)
+        need_to_write_appinfo = True
+        if path.exists(appinfo_path):
+            with open(appinfo_path, "r", encoding="utf-8") as f:
+                appinfo = loads(f.read())['appinfo']
+            if 'public_only' in appinfo.keys():
+                if appinfo['public_only'] == '1':
+                    print("Replacing public_only appinfo at:", appinfo_path)
+                    remove(appinfo_path)
+            else:
+                need_to_write_appinfo = False
+        if need_to_write_appinfo:
+            with open(appinfo_path, "wb") as f:
+                f.write(appinfo_response.buffer[:-1])
+            print("Saved appinfo for app", appid, "changenumber", changenumber)
+            # decode appinfo
+            appinfo = loads(appinfo_response.buffer[:-1].decode('utf-8', 'replace'))['appinfo']
+        if "public_only" in appinfo.keys():
+            print("WARNING: this app has additional (private) info. The archive "
+                    "may not work due to this info being missing. To get this "
+                    "info, run get_appinfo.py on this app using an account "
+                    "authorized to access it.")
 
-        # Iterate over all the downloads we want
-        exit_status = 0
-        for dl_tuple in args.downloads:
-            appid = dl_tuple[0]
-            depotid = (dl_tuple[1] if len(dl_tuple) > 1 else None)
-            manifestid = (dl_tuple[2] if len(dl_tuple) > 2 else None)
-
-            # Fetch appinfo
-            if args.local_appinfo:
-                highest_changenumber = 0
-                for file in listdir("./appinfo/"):
-                    if not file.endswith(".vdf"): continue
-                    if not file.startswith(str(appid) + "_"): continue
-                    changenumber = int(file.split("_")[1].replace(".vdf", ""))
-                    if changenumber > highest_changenumber:
-                        highest_changenumber = changenumber
-                if highest_changenumber == 0:
-                    print("\033[31merror: -l flag specified, but no local appinfo exists for app\033[0m", appid)
+        if depotid:
+            name = appinfo['depots'][str(depotid)]['name'] if 'name' in appinfo['depots'][str(depotid)] else 'unknown'
+            get_depotkeys(appid, depotid)
+            if manifestid:
+                print("Archiving", appinfo['common']['name'], "depot", depotid, "manifest", manifestid)
+                exit_status += (0 if archive_manifest(try_load_manifest(appid, depotid, manifestid), c, name, args.dry_run, args.server, args.backup) else 1)
+            elif args.branch:
+                try:
+                    branch_key = beta_check_password(appid, args.bpassword, c)
+                    if args.encryptedbranch != '':
+                        encrypted_manifest = args.encryptedbranch
+                    else:
+                        encrypted_manifest = get_gid(appinfo['depots'][str(depotid)]['encryptedmanifests'][args.branch])
+                    manifestid = int.from_bytes(symmetric_decrypt_ecb(unhexlify(encrypted_manifest),branch_key[(appid, args.branch)]),byteorder='little')
+                    print("Archiving", appinfo['common']['name'], "depot", depotid, "branch", args.branch, "manifest", manifestid, "using key", branch_key)
+                    exit_status += (0 if archive_manifest(try_load_manifest(appid, depotid, manifestid, args.branch, args.bpassword), c, name, args.dry_run, args.server, args.backup) else 1)
+                    # exit_status += (0 if archive_manifest(try_load_manifest(appid, depotid, manifestid, args.branch, branch_key), c, name, args.dry_run, args.server, args.backup) else 1)
+                except SteamError as e:
+                    print(f"Error:", e)
                     exit(1)
-                appinfo_path = "./appinfo/%s_%s.vdf" % (appid, highest_changenumber)
             else:
-                print(f"Is the client logged in? {steam_client.logged_on}")
-                print("Fetching appinfo for", appid)
-                tokens = steam_client.get_access_tokens(app_ids=[appid])
-                msg = MsgProto(EMsg.ClientPICSProductInfoRequest)
-                body_app = msg.body.apps.add()
-                body_app.appid = appid
-                if 'apps' in tokens.keys() and appid in tokens['apps'].keys():
-                    body_app.access_token = tokens['apps'][appid]
-                appinfo_response = steam_client.wait_event(steam_client.send_job(msg))[0].body.apps[0]
-                changenumber = appinfo_response.change_number
-                # Write vdf appinfo to disk
-                appinfo_path = "./appinfo/%s_%s.vdf" % (appid, changenumber)
-            need_to_write_appinfo = True
-            if path.exists(appinfo_path):
-                with open(appinfo_path, "r", encoding="utf-8") as f:
-                    appinfo = loads(f.read())['appinfo']
-                if 'public_only' in appinfo.keys():
-                    if appinfo['public_only'] == '1':
-                        print("Replacing public_only appinfo at:", appinfo_path)
-                        remove(appinfo_path)
-                else:
-                    need_to_write_appinfo = False
-            if need_to_write_appinfo:
-                with open(appinfo_path, "wb") as f:
-                    f.write(appinfo_response.buffer[:-1])
-                print("Saved appinfo for app", appid, "changenumber", changenumber)
-                # decode appinfo
-                appinfo = loads(appinfo_response.buffer[:-1].decode('utf-8', 'replace'))['appinfo']
-            if "public_only" in appinfo.keys():
-                print("WARNING: this app has additional (private) info. The archive "
-                        "may not work due to this info being missing. To get this "
-                        "info, run get_appinfo.py on this app using an account "
-                        "authorized to access it.")
-
-            if depotid:
-                name = appinfo['depots'][str(depotid)]['name'] if 'name' in appinfo['depots'][str(depotid)] else 'unknown'
-                get_depotkeys(appid, depotid)
-                if manifestid:
-                    print("Archiving", appinfo['common']['name'], "depot", depotid, "manifest", manifestid)
-                    exit_status += (0 if archive_manifest(try_load_manifest(appid, depotid, manifestid), c, name, args.dry_run, args.server, args.backup) else 1)
-                elif args.branch:
-                    try:
-                        branch_key = beta_check_password(appid, args.bpassword, c)
-                        if args.encryptedbranch != '':
-                            encrypted_manifest = args.encryptedbranch
-                        else:
-                            encrypted_manifest = get_gid(appinfo['depots'][str(depotid)]['encryptedmanifests'][args.branch])
-                        manifestid = int.from_bytes(symmetric_decrypt_ecb(unhexlify(encrypted_manifest),branch_key[(appid, args.branch)]),byteorder='little')
-                        print("Archiving", appinfo['common']['name'], "depot", depotid, "branch", args.branch, "manifest", manifestid, "using key", branch_key)
-                        # exit_status += (0 if archive_manifest(try_load_manifest(appid, depotid, manifestid, args.branch, args.bpassword), c, name, args.dry_run, args.server, args.backup) else 1)
-                        exit_status += (0 if archive_manifest(try_load_manifest(appid, depotid, manifestid, args.branch, branch_key), c, name, args.dry_run, args.server, args.backup) else 1)
-                    except SteamError as e:
-                        print(f"Error:", e)
-                        exit(1)
-                else:
-                    manifest = get_gid(appinfo['depots'][str(depotid)]['manifests']['public'])
-                    print("Archiving", appinfo['common']['name'], "depot", depotid, "manifest", manifest)
-                    exit_status += (0 if archive_manifest(try_load_manifest(appid, depotid, manifest), c, name, args.dry_run, args.server, args.backup) else 1)
-            else:
-                print("Archiving all latest depots for", appinfo['common']['name'], "build", appinfo['depots']['branches']['public']['buildid'])
-                for depot in appinfo["depots"]:
-                    get_depotkeys(appid, depot)
-                    depotinfo = appinfo["depots"][depot]
-                    if not "manifests" in depotinfo or not "public" in depotinfo["manifests"]:
-                        continue
-                    exit_status += (0 if archive_manifest(try_load_manifest(appid, depot, get_gid(depotinfo["manifests"]["public"])), c, depotinfo["name"] if "name" in depotinfo else "unknown", args.dry_run, args.server, args.backup) else 1)
-        steam_client.logout()
-        exit(exit_status)
-    except KeyboardInterrupt:
-        if steam_client.connected:
-            steam_client.logout()
+                manifest = get_gid(appinfo['depots'][str(depotid)]['manifests']['public'])
+                print("Archiving", appinfo['common']['name'], "depot", depotid, "manifest", manifest)
+                exit_status += (0 if archive_manifest(try_load_manifest(appid, depotid, manifest), c, name, args.dry_run, args.server, args.backup) else 1)
+        else:
+            print("Archiving all latest depots for", appinfo['common']['name'], "build", appinfo['depots']['branches']['public']['buildid'])
+            for depot in appinfo["depots"]:
+                get_depotkeys(appid, depot)
+                depotinfo = appinfo["depots"][depot]
+                if not "manifests" in depotinfo or not "public" in depotinfo["manifests"]:
+                    continue
+                exit_status += (0 if archive_manifest(try_load_manifest(appid, depot, get_gid(depotinfo["manifests"]["public"])), c, depotinfo["name"] if "name" in depotinfo else "unknown", args.dry_run, args.server, args.backup) else 1)
+    #steam_client.logout()
+    exit(exit_status)
