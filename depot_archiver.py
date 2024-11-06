@@ -15,6 +15,7 @@ if __name__ == "__main__": # exit before we import our shit if the args are wron
     dl_group = parser.add_mutually_exclusive_group()
     dl_group.add_argument("-a", type=int, dest="downloads", metavar=("appid","depotid"), action="append", nargs='+', help="App, depot, and manifest ID to download. If the manifest ID is omitted, the lastest manifest specified by the public branch will be downloaded.\nIf the depot ID is omitted, all depots specified by the public branch will be downloaded.")
     dl_group.add_argument("-w", type=int, nargs='?', help="Workshop file ID to download.", dest="workshop_id")
+    parser.add_argument("--anon", "--anonymous", action="store_true", help="Logs in Anonymously. Only used for public accessible files.")
     parser.add_argument("-r", type=str, nargs='?', help="Branch Name.", dest="branch")
     parser.add_argument("-n", type=str, nargs='?', help="Branch Password", dest="bpassword")
     parser.add_argument("-b", help="Download into a Steam backup file instead of storing the chunks individually", dest="backup", action="store_true")
@@ -247,6 +248,7 @@ def beta_check_password(app_id, password, c):
 
 def get_depotkeys(app, depot):
     # key_text = False
+    makedirs("./keys", exist_ok=True)
     key_binary = False
     keyfile = "./keys/%s.depotkey" % depot
     # keys_saved = []
@@ -311,7 +313,7 @@ def get_depotkeys(app, depot):
 
 if __name__ == "__main__":
     try:
-            # Create directories
+        # Create directories
         makedirs("./appinfo", exist_ok=True)
         makedirs("./depots", exist_ok=True)
 
@@ -323,6 +325,8 @@ if __name__ == "__main__":
             auto_login(steam_client, fallback_anonymous=False, relogin=False)
         elif args.username:
             auto_login(steam_client, args.username, args.password)
+        elif args.anon:
+            auto_login(steam_client, fallback_anonymous=True)
         else:
             auto_login(steam_client)
         c = CDNClient(steam_client)
@@ -366,6 +370,7 @@ if __name__ == "__main__":
                     exit(1)
                 appinfo_path = "./appinfo/%s_%s.vdf" % (appid, highest_changenumber)
             else:
+                print(f"Is the client logged in? {steam_client.logged_on}")
                 print("Fetching appinfo for", appid)
                 tokens = steam_client.get_access_tokens(app_ids=[appid])
                 msg = MsgProto(EMsg.ClientPICSProductInfoRequest)

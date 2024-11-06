@@ -8,7 +8,7 @@ from os.path import exists
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
 
-def auto_login(client, username="", password="", fallback_anonymous=True, relogin=True):
+def auto_login(client, username="", password="", fallback_anonymous=False, relogin=True):
     assert(type(client) == SteamClient)
     makedirs("./auth", exist_ok=True)
     
@@ -20,7 +20,7 @@ def auto_login(client, username="", password="", fallback_anonymous=True, relogi
         client.anonymous_login()
         return
     # If we have set a username and password in command line
-    if username != "" and password != "":
+    if username and password:
         LOGON_DETAILS = {
 			'username' : username,
 			'password' : password,
@@ -57,7 +57,7 @@ def auto_login(client, username="", password="", fallback_anonymous=True, relogi
                 'refresh_token': webauth.refresh_token,
 			}
             with open(keypath, 'w') as f:
-                json.dump(credentials, f, intend=4)
+                json.dump(credentials, f, indent=4)
             
         print("Logging in as", username, "using saved login key")
         client.login(webauth.username, access_token=webauth.refresh_token)
@@ -73,33 +73,26 @@ def auto_login(client, username="", password="", fallback_anonymous=True, relogi
         #     with open(keypath, 'w') as f:
         #         json.dump(credentials, f, indent=4)
         
-        return post_login(client)
-    if username == "" and exists(keypath) and relogin:
+        return
+    if not username and exists(keypath) and relogin:
         with open(keypath, "r") as f: credentials = json.load(f)
         client.login(credentials['username'], access_token=credentials['refresh_token'])
-        return post_login(client)
+        return
     # if no username, fall back to either anonymous or CLI login based on fallback_anonymous
     if fallback_anonymous:
         client.anonymous_login()
         return
     else:
         webauth.cli_login(input("Steam User: "))
+        credentials = {
+            'expires': (datetime.now() + relativedelta(months=6, days=-1)).strftime("%Y-%m-%d %H:%M:%S.%f"),
+			'username': webauth.username,
+            'refresh_token': webauth.refresh_token,
+		}
+        with open(keypath, 'w') as f:
+            json.dump(credentials, f, indent=4)
         client.login(webauth.username, access_token=webauth.refresh_token)
-        
-        return post_login(client)
-
-def post_login(client, used_login_key=False):
-    assert(type(client) == SteamClient)
-    makedirs("./auth/", exist_ok=True)
-    # if not used_login_key:
-    #     if not client.login_key:
-    #         print("Waiting for login key...")
-    #         client.wait_event(SteamClient.EVENT_NEW_LOGIN_KEY)
-    #     print("Writing login key...")
-    #     with open("./auth/" + client.username + ".txt", "w") as f:
-    #         f.write(client.login_key)
-    with open("./auth/lastuser.txt", "w") as f:
-        f.write(client.username)
+        return
 
 if __name__ == "__main__":
     auto_login(SteamClient(), fallback_anonymous=False, relogin=False)

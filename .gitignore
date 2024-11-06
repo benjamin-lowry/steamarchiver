@@ -11,3 +11,4 @@ keys/
 *.swp
 depot_keys.txt
 last_change.txt
+.vscode/
