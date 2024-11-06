@@ -183,6 +183,7 @@ def try_load_manifest(appid, depotid, manifestid, branch='public', password=None
             print("Loaded cached manifest %s from disk" % manifestid)
             return CDNDepotManifest(c, appid, f.read())
     else:
+        retry = 0
         while True:
             license_requested = False
             try:
@@ -195,15 +196,16 @@ def try_load_manifest(appid, depotid, manifestid, branch='public', password=None
                 break
             except SteamError as e:
                 if e.eresult == EResult.AccessDenied:
-                    if not license_requested:
+                    # if result is not None and result == EResult.RateLimitExceeded:
+                    #     print("Rate Limit Exceeded")
+                    #     return False
+                    if not license_requested and retry <= 5:
                         result, granted_appids, granted_packageids = steam_client.request_free_license([appid])
+                        retry += 1
                         license_requested = True
                         continue
                     print(e.message)
                     print(f"Use the -i flag to log into a Steam account with access to this depot, or place a downloaded copy of the manifest at depots/{depotid}/{manifestid}.zip")
-                    return False
-                if e.eresult == EResult.RateLimitExceeded:
-                    print("Unable to download. Rate Limit Exceeded")
                     return False
                 else:
                     print(e.message + ": " + str(e.eresult))
