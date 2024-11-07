@@ -436,7 +436,9 @@ if __name__ == "__main__":
         else:
             print("Archiving all latest depots for", appinfo['common']['name'], "build", appinfo['depots']['branches']['public']['buildid'])
             for depot in appinfo["depots"]:
-                get_depotkeys(appid, depot)
+                if isinstance(depot, int) or (isinstance(depot, str) and depot.isdigit()):
+                    get_depotkeys(appid, depot)
+                else: continue
                 depotinfo = appinfo["depots"][depot]
                 if not "manifests" in depotinfo or not "public" in depotinfo["manifests"]:
                     continue

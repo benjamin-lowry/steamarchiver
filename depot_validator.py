@@ -15,7 +15,7 @@ from os.path import dirname, exists
 from pathlib import Path
 from struct import unpack
 from sys import argv
-from zipfile import ZipFile
+from zipfile import BadZipFile, ZipFile
 import lzma
 
 if __name__ == "__main__": # exit before we import our shit if the args are wrong
@@ -24,7 +24,7 @@ if __name__ == "__main__": # exit before we import our shit if the args are wron
     parser.add_argument('depotkey', type=str, nargs='?')
     parser.add_argument('-b', dest="backup", help="Path to a .csd backup file to review (the manifest must also be present in the depots folder)", nargs='?')
     # parser.add_argument('-f', dest="files", help="List files to review (can be used multiple times); if ommitted, all files will be examined. Glob matching supported.", action="append")
-    parser.add_argument('-m', dest="manifests", htlp="Uses the existing manifests to validate the files")
+    # parser.add_argument('-m', dest="manifests", help="Uses the existing manifests to validate the files")
     parser.add_argument('-t', type=int, default=1, dest="threads", help="specifies the number of threads to use for processing the files")
     args = parser.parse_args()
     if args.backup and args.manifests:
@@ -97,8 +97,18 @@ def process_file(file, value, badfiles):
                 return chunkhex, False
         elif decrypted[:2] == b'PK': # Zip
             print("Testing (Zip) from chunk", chunkhex)
-            zipfile = ZipFile(BytesIO(decrypted))
-            decompressed = zipfile.read(zipfile.filelist[0])
+            try:
+                zipfile = ZipFile(BytesIO(decrypted))
+                decompressed = zipfile.read(zipfile.filelist[0])
+            except BadZipFile:
+                print(f"\033[31mFailed to decompress:\033[0m {chunkhex}")
+                print(f"\033[31mError:\033[0m {BadZipFile}")
+                badfiles.put(chunkhex)
+                return chunkhex, False
+            except Exception as e:
+                print(f"\033[31mFailed to decompress:\033[0m {chunkhex}")
+                badfiles.put(chunkhex)
+                return chunkhex, False
         else:
             print("\033[31mERROR: unknown archive type\033[0m", decrypted[:2].decode())
             badfiles.put(chunkhex)
