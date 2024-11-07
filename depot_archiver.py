@@ -286,6 +286,7 @@ def get_depotkeys(app, depot):
     # If neither exist
     if not key_binary:
         try:
+            depot = int(depot)
             key = steam_client.get_depot_key(app, depot).depot_encryption_key
         except AttributeError:
             print("error getting key for depot", depot)
@@ -439,12 +440,13 @@ if __name__ == "__main__":
         else:
             print("Archiving all latest depots for", appinfo['common']['name'], "build", appinfo['depots']['branches']['public']['buildid'])
             for depot in appinfo["depots"]:
+                if isinstance(depot, int) or (isinstance(depot, str) and depot.isdigit()):
+                    get_depotkeys(appid, depot)
+                else:
+                    continue
                 depotinfo = appinfo["depots"][depot]
                 if not "manifests" in depotinfo or not "public" in depotinfo["manifests"]:
                     continue
-                else:
-                    depot = int(depot)
-                    get_depotkeys(appid, depot)
                 exit_status += (0 if archive_manifest(try_load_manifest(appid, depot, get_gid(depotinfo["manifests"]["public"])), c, depotinfo["name"] if "name" in depotinfo else "unknown", args.dry_run, args.server, args.backup) else 1)
     #steam_client.logout()
     exit(exit_status)
