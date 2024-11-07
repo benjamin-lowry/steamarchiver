@@ -199,12 +199,12 @@ def try_load_manifest(appid, depotid, manifestid, branch='public', password=None
                     # if result is not None and result == EResult.RateLimitExceeded:
                     #     print("Rate Limit Exceeded")
                     #     return False
-                    if not license_requested and retry <= 5:
+                    if not license_requested and retry < 2:
                         result, granted_appids, granted_packageids = steam_client.request_free_license([appid])
                         retry += 1
                         license_requested = True
                         continue
-                    print(e.message)
+                    print(e.message + ": " + EResult(e.eresult).name)
                     print(f"Use the -i flag to log into a Steam account with access to this depot, or place a downloaded copy of the manifest at depots/{depotid}/{manifestid}.zip")
                     return False
                 elif e.eresult == EResult.Timeout:
