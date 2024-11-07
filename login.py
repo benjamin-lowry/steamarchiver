@@ -28,7 +28,7 @@ def auto_login(client, username="", password="", fallback_anonymous=False, relog
         try:
             webauth.login(**LOGON_DETAILS)
         except wa.TwoFactorCodeRequired:
-            webauth.login(code=input("Enter SteamGuard Code: "))
+            webauth.login(code=input("Enter your Steam Guard code (or simply press Enter if approved via app): "))
         except wa.EmailCodeRequired:
             webauth.login(code=input("Enter Email Code: "))
         
