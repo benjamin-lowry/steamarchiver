@@ -207,6 +207,9 @@ def try_load_manifest(appid, depotid, manifestid, branch='public', password=None
                     print(e.message)
                     print(f"Use the -i flag to log into a Steam account with access to this depot, or place a downloaded copy of the manifest at depots/{depotid}/{manifestid}.zip")
                     return False
+                elif e.eresult == EResult.Timeout:
+                    steam_client.reconnect()
+                    continue
                 else:
                     print(e.message + ": " + str(e.eresult))
                     return False
@@ -436,12 +439,12 @@ if __name__ == "__main__":
         else:
             print("Archiving all latest depots for", appinfo['common']['name'], "build", appinfo['depots']['branches']['public']['buildid'])
             for depot in appinfo["depots"]:
-                if isinstance(depot, int) or (isinstance(depot, str) and depot.isdigit()):
-                    get_depotkeys(appid, depot)
-                else: continue
                 depotinfo = appinfo["depots"][depot]
                 if not "manifests" in depotinfo or not "public" in depotinfo["manifests"]:
                     continue
+                else:
+                    depot = int(depot)
+                    get_depotkeys(appid, depot)
                 exit_status += (0 if archive_manifest(try_load_manifest(appid, depot, get_gid(depotinfo["manifests"]["public"])), c, depotinfo["name"] if "name" in depotinfo else "unknown", args.dry_run, args.server, args.backup) else 1)
     #steam_client.logout()
     exit(exit_status)
