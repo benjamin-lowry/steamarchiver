@@ -110,7 +110,7 @@ def archive_manifest(manifest, c, name="unknown", dry_run=False, server_override
                     try:
                         if server_override:
                             request_url = "%s/depot/%s/chunk/%s" % (server_override, manifest.depot_id, chunk_str)
-                            host = server_override
+                            host = server.host
                         else:
                             request_url = "%s://%s:%s/depot/%s/chunk/%s" % ("https" if server.https else "http",
                                 server.host,
@@ -123,6 +123,11 @@ def archive_manifest(manifest, c, name="unknown", dry_run=False, server_override
                                 download_state.bytes += response.content_length
                                 content = await response.content.read()
                                 break
+                            if response.status == 404:
+                                print("rotating to next server")
+                                servers.rotate(-1)
+                                server = servers[0]
+                                continue
                             elif 400 <= response.status < 500:
                                 print(f"\033[31merror: received status code {response.status} (on chunk {chunk_str}, server {host})\033[0m")
                                 return False

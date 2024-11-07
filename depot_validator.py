@@ -157,19 +157,19 @@ if __name__ == "__main__":
                 chunks[chunk] = _
                 chunks_by_store[chunk] = csm
             chunkstores[csm] = chunkstore
-    elif args.manifests:
-        manifestChunks = []
-        manifestFiles = [data.name for data in scandir(path) if data.is_file()
-        and data.name.endswith(".zip")]
-        for eachManifest in manifestFiles:
-            with open(path + "%s.zip" % eachManifest, "rb") as f:
-                manifest = DepotManifest(f.read())
-                if manifest.filenames_encrypted:
-                    manifest.decrypt_filenames(args.depotkey)
-                for files in manifest.iter_files():
-                    for chunk in sorted(files.chunks, key = lambda chunk: chunk.offset):
-                        manifestChunks.append(chunk.sha)
-        for name in manifestChunks: chunks[name] = 0
+    # elif args.manifests:
+    #     manifestChunks = []
+    #     manifestFiles = [data.name for data in scandir(path) if data.is_file()
+    #     and data.name.endswith(".zip")]
+    #     for eachManifest in manifestFiles:
+    #         with open(path + "%s.zip" % eachManifest, "rb") as f:
+    #             manifest = DepotManifest(f.read())
+    #             if manifest.filenames_encrypted:
+    #                 manifest.decrypt_filenames(args.depotkey)
+    #             for files in manifest.iter_files():
+    #                 for chunk in sorted(files.chunks, key = lambda chunk: chunk.offset):
+    #                     manifestChunks.append(chunk.sha)
+    #     for name in manifestChunks: chunks[name] = 0
     else:
         chunkFiles = [data.name for data in scandir(path) if data.is_file()
         and not data.name.endswith(".zip")]
