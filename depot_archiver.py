@@ -104,8 +104,6 @@ def archive_manifest(manifest, c, name="unknown", dry_run=False, server_override
                 if path.exists(dest + chunk_str) or (chunkstore and (chunk in chunkstore.chunks.keys())):
                     download_state.chunks_skipped += 1
                     continue
-                if not csdfile: f = open(dest + chunk_str, "wb")
-                else: f = csdfile
                 while True:
                     try:
                         if server_override:
@@ -136,6 +134,8 @@ def archive_manifest(manifest, c, name="unknown", dry_run=False, server_override
                     servers.rotate(-1)
                     server = servers[0]
                     await sleep(0.5)
+                if not csdfile: f = open(dest + chunk_str, "wb")
+                else: f = csdfile
                 f.seek(0, 2)
                 offset = f.tell()
                 length = f.write(content)
@@ -192,6 +192,7 @@ def try_load_manifest(appid, depotid, manifestid, branch='public', password=None
         while True:
             license_requested = False
             try:
+                depotid = int(depotid)
                 request_code = c.get_manifest_request_code(appid, depotid, manifestid, branch, password)
                 print("Obtained code", request_code, "for depot", depotid, "valid as of", datetime.now())
                 resp = c.cdn_cmd('depot', '%s/manifest/%s/5/%s' % (depotid, manifestid, request_code), appid, depotid)
