@@ -89,7 +89,7 @@ def auto_login(client, username="", password="", fallback_anonymous=False, relog
         client.anonymous_login()
         return
     else:
-        webauth.cli_login(input("Steam User: "))
+        webauth.cli_login(username if username else input("Steam username: "))
         credentials = {
             'expires': (datetime.now() + relativedelta(months=6, days=-1)).strftime("%Y-%m-%d %H:%M:%S.%f"),
 			'username': webauth.username,
