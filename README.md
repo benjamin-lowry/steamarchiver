@@ -4,13 +4,19 @@ A set of utilities to preserve Steam content, including tools to archive app
 information, archive depots in SteamPipe CDN content and extract them, and
 download versions of the Steam client.
 
-Patches and feedback can go to [the mailing
-list](https://lists.sr.ht/~technomage6/steamarchiver).
+Send feedback to [the mailing list].
 
-This is a Fork of [Steam Archive](https://git.sr.ht/~blowry/steamarchiver) by Blowry.
+The official repository is hosted [on
+Sourcehut](https://git.sr.ht/~blowry/steamarchiver), and mirrored on [GitHub].
+Contributions welcome: send patches to [the mailing list] or pull requests on
+[GitHub] (patches are preferred).
 
-Special credit goes to [SolsticeGameStudio](https://github.com/solsticegamestudios/steam)
-for maintaining a current fork of the ValvePython library and keeping it current.
+Special credit goes to
+[SolsticeGameStudios](https://github.com/solsticegamestudios/steam) for
+maintaining the current fork of the ValvePython library used by steamarchiver.
+
+[the mailing list]: https://lists.sr.ht/~blowry/steamarchiver
+[GitHub]: https://github.com/benjamin-lowry/steamarchiver
 
 ## Usage
 
@@ -118,7 +124,7 @@ Extract those binaries:
 
 ## License
 
-   Copyright 2021-2023 Benjamin Lowry
+   Copyright 2021-2024 Benjamin Lowry
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
