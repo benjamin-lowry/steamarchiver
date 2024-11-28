@@ -16,7 +16,6 @@ if __name__ == "__main__": # exit before we import our shit if the args are wron
     log_group = parser.add_mutually_exclusive_group()
     dl_group.add_argument("-a", type=int, dest="downloads", metavar=("appid","depotid"), action="append", nargs='+', help="App, depot, and manifest ID to download. If the manifest ID is omitted, the lastest manifest specified by the public branch will be downloaded.\nIf the depot ID is omitted, all depots specified by the public branch will be downloaded.")
     dl_group.add_argument("-w", type=int, nargs='?', help="Workshop file ID to download.", dest="workshop_id")
-    parser.add_argument("--anon", "--anonymous", action="store_true", help="Logs in Anonymously. Only used for public accessible files.")
     parser.add_argument("-r", type=str, nargs='?', help="Branch Name.", dest="branch")
     parser.add_argument("-n", type=str, nargs='?', help="Branch Password", dest="bpassword")
     parser.add_argument("-b", help="Download into a Steam backup file instead of storing the chunks individually", dest="backup", action="store_true")
@@ -346,8 +345,6 @@ if __name__ == "__main__":
         auto_login(steam_client, fallback_anonymous=False, relogin=False)
     elif args.username:
         auto_login(steam_client, args.username, args.password)
-    elif args.anon:
-        auto_login(steam_client, fallback_anonymous=True)
     else:
         auto_login(steam_client)
     c = CDNClient(steam_client)
