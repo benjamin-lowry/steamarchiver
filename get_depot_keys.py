@@ -4,16 +4,19 @@ from binascii import hexlify
 from steam.client import SteamClient
 from steam.core.msg import MsgProto
 from steam.enums.emsg import EMsg
-from os.path import exists
+from os import makedirs
+from os.path import exists, basename
 from sys import argv
 from vdf import loads
 from login import auto_login
+from glob import glob
 
 if __name__ == "__main__":
     parser = ArgumentParser(description='Request and save depot keys.')
     parser.add_argument('-d', dest="depots", help="depot to get key for (can be used multiple times)", action="append", nargs='?', type=int)
     parser.add_argument('-a', dest="apps", help="app to get all depot keys for (can be used multiple times)", action="append", nargs='?', type=int)
     parser.add_argument("-i", help="Log into a Steam account interactively.", dest="interactive", action="store_true")
+    parser.add_argument("-o", help="Old mode: store keys to depot_keys.txt instead of individual files", dest="old_mode", action="store_true")
     parser.add_argument("-u", type=str, help="Username for non-interactive login", dest="username", nargs="?")
     parser.add_argument("-p", type=str, help="Password for non-interactive login", dest="password", nargs="?")
     args = parser.parse_args()
@@ -100,6 +103,7 @@ if __name__ == "__main__":
                 print("Saved appinfo for app", app.appid, "changenumber", app.change_number)
 
     keys_saved = []
+    # Track which keys have already been saved, so we don't save them again
     if exists("./depot_keys.txt"):
         with open("./depot_keys.txt", "r", encoding="utf-8") as f:
             for line in f.read().split("\n"):
@@ -108,44 +112,55 @@ if __name__ == "__main__":
                 except ValueError:
                     continue
         print("%s keys already saved in depot_keys.txt" % len(keys_saved))
-    with open("./depot_keys.txt", "a", encoding="utf-8", newline="\n") as f:
-        for app, app_info in app_dict.items():
-            if not app in licensed_apps:
+    keys_saved += [int(basename(f).replace(".depotkey", "")) for f in
+                   glob("./keys/*.depotkey")]
+    if args.old_mode:
+        f = open("./depot_keys.txt", "a", encoding="utf-8", newline="\n")
+    else:
+        makedirs("./keys", exist_ok=True)
+    for app, app_info in app_dict.items():
+        if not app in licensed_apps:
+            continue
+        if args.apps:
+            if app not in args.apps:
                 continue
-            if args.apps:
-                if app not in args.apps:
+        if not 'depots' in app_info:
+            continue
+        if not app in app_info['depots']:
+            app_info['depots'][app] = {'name': app_info['common']['name']}
+        for depot, info in app_info['depots'].items():
+            try:
+                depot = int(depot)
+            except ValueError:
+                continue
+            if args.depots:
+                if depot not in args.depots:
                     continue
-            if not 'depots' in app_info:
+            if depot in keys_saved:
+                print("skipping previously saved key for depot", depot)
                 continue
-            if not app in app_info['depots']:
-                app_info['depots'][app] = {'name': app_info['common']['name']}
-            for depot, info in app_info['depots'].items():
+            if (depot in licensed_depots) or (depot in licensed_apps):
                 try:
-                    depot = int(depot)
-                except ValueError:
+                    key = steam_client.get_depot_key(app, depot).depot_encryption_key
+                except AttributeError:
+                    print("error getting key for depot", depot)
                     continue
-                if args.depots:
-                    if depot not in args.depots:
-                        continue
-                if depot in keys_saved:
-                    print("skipping previously saved key for depot", depot)
-                    continue
-                if (depot in licensed_depots) or (depot in licensed_apps):
-                    try:
-                        key = steam_client.get_depot_key(app, depot).depot_encryption_key
-                    except AttributeError:
-                        print("error getting key for depot", depot)
-                        continue
-                    else:
-                        keys_saved.append(depot)
-                        if key != b'':
-                            key_hex = hexlify(key).decode()
+                else:
+                    keys_saved.append(depot)
+                    if key != b'':
+                        key_hex = hexlify(key).decode()
+                        if args.old_mode:
                             if 'name' in info.keys():
                                 f.write("%s\t\t%s\t%s" % (depot, key_hex, info['name']) + "\n")
                                 print("%s\t\t%s\t%s" % (depot, key_hex, info['name']))
                             else:
                                 f.write("%s\t\t%s" % (depot, key_hex) + "\n")
                                 print("%s\t\t%s" % (depot, key_hex))
+                        else:
+                            with open("./keys/" + str(depot) + ".depotkey", "wb") as f:
+                                f.write(key)
+    if args.old_mode:
+        f.close()
 
     @steam_client.on("disconnected")
     def handle_disconnect():
