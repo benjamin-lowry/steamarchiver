@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 from argparse import ArgumentParser
 from asyncio import run, gather, sleep
+from base64 import b64decode
 from binascii import hexlify, unhexlify
-from datetime import datetime
+from datetime import datetime, timezone
 from math import ceil
 from os import makedirs, path, listdir, remove
 from sys import argv
 import logging
+import json
 
 _LOG = logging.getLogger("DepotArchiver")
 
@@ -28,6 +30,7 @@ if __name__ == "__main__": # exit before we import our shit if the args are wron
     parser.add_argument("-i", help="Log into a Steam account interactively.", dest="interactive", action="store_true")
     parser.add_argument("-u", type=str, help="Username for non-interactive login", dest="username", nargs="?")
     parser.add_argument("-p", type=str, help="Password for non-interactive login", dest="password", nargs="?")
+    parser.add_argument("--debug-manifest", help="Save manifest data as JSON for debugging", action="store_true")
     log_group.add_argument("--debug", help="Enable debug logging", action="store_true")
     log_group.add_argument("--info", help="Enable info logging", action="store_true")
     args = parser.parse_args()
@@ -48,9 +51,9 @@ if __name__ == "__main__": # exit before we import our shit if the args are wron
         parser.print_help()
         exit(1)
     if args.debug:
-        logging.basicConfig(level=logging.DEBUG)
+        _LOG.basicConfig(level=logging.DEBUG)
     elif args.info:
-        logging.basicConfig(level=logging.INFO)
+        _LOG.basicConfig(level=logging.INFO)
     # if args.branch and not args.bpassword:
     #     print("You need a password in order to download from a non-Public Branch")
     #     parser.print_help()
@@ -59,7 +62,7 @@ if __name__ == "__main__": # exit before we import our shit if the args are wron
 from steam.client import SteamClient
 from steam.client.cdn import CDNClient, CDNDepotManifest
 from steam.core.msg import MsgProto
-from steam.core.crypto import symmetric_decrypt_ecb
+from steam.core.crypto import symmetric_decrypt_ecb, symmetric_decrypt
 from steam.enums import EResult
 from steam.enums.emsg import EMsg
 from steam.exceptions import SteamError
@@ -69,15 +72,67 @@ from aiohttp import ClientSession
 from login import auto_login
 from chunkstore import Chunkstore
 
+def save_manifest_to_json(manifest, output_dir):
+    debug_dir = path.join(output_dir, "debug")
+    makedirs(debug_dir, exist_ok=True)
+    manifest_path = path.join(debug_dir, f"{manifest.depot_id}_{manifest.gid}.json")
+    
+    # Load the depot key
+    keyfile = f"./depots/{manifest.depot_id}/{manifest.depot_id}.depotkey"
+    if not path.exists(keyfile):
+        print(f"Depot key file not found: {keyfile}")
+        return
+    with open(keyfile, "rb") as f:
+        decryption_key = f.read()
+    
+    # Convert the manifest payload to a dictionary
+    payload_dict = {
+        "depot_id": manifest.depot_id,
+        "gid": manifest.gid,
+        "creation_time": datetime.fromtimestamp(manifest.metadata.creation_time, tz=timezone.utc).strftime('%Y-%m-%dT%H:%M:%S'),
+        "filenames_encrypted": manifest.filenames_encrypted,
+        "mappings": []
+    }
+    
+    for file in manifest.payload.mappings:
+        decrypted_filename = symmetric_decrypt(b64decode(file.filename), decryption_key).decode('utf-8').rstrip('\x00')
+        file_dict = {
+            "Encrypted Name": file.filename,
+            "Decrypted Name": decrypted_filename,
+            "size": file.size,
+            "flags": file.flags,
+            "sha_filename": hexlify(file.sha_filename).decode(),
+            "sha_content": hexlify(file.sha_content).decode(),
+            "chunks": []
+        }
+        for chunk in file.chunks:
+            chunk_dict = {
+                "sha": hexlify(chunk.sha).decode(),
+                "crc": chunk.crc,
+                "offset": chunk.offset,
+                "cb_original": chunk.cb_original,
+                "cb_compressed": chunk.cb_compressed
+            }
+            file_dict["chunks"].append(chunk_dict)
+        payload_dict["mappings"].append(file_dict)
+    
+    # Write the dictionary to a JSON file
+    with open(manifest_path, "w") as f:
+        json.dump(payload_dict, f, indent=4)
+    
+    print(f"Manifest saved to {manifest_path}")
+
 def archive_manifest(manifest, c, name="unknown", dry_run=False, server_override=None, backup=False):
     if not manifest:
         return False
     print("Archiving", manifest.depot_id, "(%s)" % (name), "gid", manifest.gid, "from", datetime.fromtimestamp(manifest.creation_time))
-    dest = "./depots/" + str(manifest.depot_id) + "/"
-    makedirs(dest, exist_ok=True)
+    if args.debug_manifest:
+        save_manifest_to_json(manifest, "./depots/" + str(manifest.depot_id))
     if dry_run:
         print("Not downloading chunks (dry run)")
         return True
+    dest = "./depots/" + str(manifest.depot_id) + "/chunk/"
+    makedirs(dest, exist_ok=True)
     if backup:
         chunkstore = Chunkstore(str(manifest.depot_id) + "_depotcache_1.csm", depot=manifest.depot_id, is_encrypted=True)
         if path.exists(chunkstore.csdname): chunkstore.unpack()
@@ -187,8 +242,8 @@ def archive_manifest(manifest, c, name="unknown", dry_run=False, server_override
 
 def try_load_manifest(appid, depotid, manifestid, branch='public', password=None):
     print(f"Getting a manifest for app {appid} depot {depotid} gid {manifestid}")
-    dest = "./depots/%s/%s.zip" % (depotid, manifestid)
-    makedirs("./depots/%s" % depotid, exist_ok=True)
+    dest = "./depots/%s/manifest/%s.manif5" % (depotid, manifestid)
+    makedirs("./depots/%s/manifest" % depotid, exist_ok=True)
     if path.exists(dest):
         with open(dest, "rb") as f:
             print("Loaded cached manifest %s from disk" % manifestid)
@@ -268,9 +323,9 @@ def beta_check_password(app_id, password, c):
 
 def get_depotkeys(app, depot):
     # key_text = False
-    makedirs("./keys", exist_ok=True)
+    makedirs("./depots/%s" % depot, exist_ok=True)
     key_binary = False
-    keyfile = "./keys/%s.depotkey" % depot
+    keyfile = "./depots/%s/%s.depotkey" % (depot, depot)
     # keys_saved = []
     # key = 0
     # Checking if either depot key within depot_key.txt or the depot's binary key file exists
