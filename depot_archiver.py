@@ -51,9 +51,9 @@ if __name__ == "__main__": # exit before we import our shit if the args are wron
         parser.print_help()
         exit(1)
     if args.debug:
-        _LOG.basicConfig(level=logging.DEBUG)
+        logging.basicConfig(level=logging.DEBUG)
     elif args.info:
-        _LOG.basicConfig(level=logging.INFO)
+        logging.basicConfig(level=logging.INFO)
     # if args.branch and not args.bpassword:
     #     print("You need a password in order to download from a non-Public Branch")
     #     parser.print_help()
@@ -177,6 +177,7 @@ def archive_manifest(manifest, c, name="unknown", dry_run=False, server_override
                                 manifest.depot_id,
                                 chunk_str)
                             host = ("https" if server.https else "http") + "://" + server.host
+                        _LOG.info(f"Downloading from {request_url}")
                         async with session.get(request_url) as response:
                             if response.ok:
                                 download_state.bytes += response.content_length
@@ -256,6 +257,10 @@ def try_load_manifest(appid, depotid, manifestid, branch='public', password=None
                 depotid = int(depotid)
                 request_code = c.get_manifest_request_code(appid, depotid, manifestid, branch, password)
                 print("Obtained code", request_code, "for depot", depotid, "valid as of", datetime.now())
+                ## Unable to get full URL due to how the manifest is grabbed. Log will show the URL string
+                #  After the steam CDN URL. If you know the CDN Server name, you can prepend it to
+                #  a wget/curl call for the manifest, for checking manifest files.
+                _LOG.info(f"Downloading from depot/{depotid}/manifest/{manifestid}/5/{request_code}")
                 resp = c.cdn_cmd('depot', '%s/manifest/%s/5/%s' % (depotid, manifestid, request_code), appid, depotid)
                 if not resp.ok:
                     print("Got status code", resp.status_code, resp.reason, "trying to download depot", depotid, "manifest", manifestid)

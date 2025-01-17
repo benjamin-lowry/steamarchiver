@@ -1,4 +1,22 @@
 #!/usr/bin/env python3
+"""
+This script extracts downloaded depots from Steam, handling encrypted filenames and chunks, and supports multithreaded extraction.
+The script performs the following tasks:
+1. Parses command-line arguments to configure the extraction process.
+2. Loads the depot manifest and decrypts filenames if necessary.
+3. Handles backup chunkstores if provided.
+4. Matches files to be extracted based on provided patterns.
+5. Processes chunks, decrypting and decompressing them as needed.
+6. Validates the SHA-1 checksum of the output files if requested.
+7. Writes metadata to track the progress of the extraction process.
+8. Uses a ThreadPoolExecutor to process chunks in parallel, improving performance.
+9. Uses a PriorityQueue to ensure chunks are written in the correct order.
+The try loop within the ThreadPoolExecutor block is responsible for:
+- Submitting tasks to process each chunk in parallel.
+- Collecting the results of the processed chunks.
+- Writing the decompressed chunks to the output file in the correct order.
+- Handling retries in case of PermissionError during file operations.
+"""
 from argparse import ArgumentParser
 from binascii import hexlify
 from datetime import datetime
@@ -251,10 +269,10 @@ if __name__ == "__main__":
                     if args.validate:
                         expected_sha1 = hexlify(file.sha_content).decode()
                         if validate_file(final_file_path, expected_sha1):
-                            print(f"File {file.filename} already exists and is valid. Skipping...")
+                            print(f"File {file.filename} already exists and is \033[92m\033[1mvalid\033[0m. Skipping...")
                             continue
                         else:
-                            print(f"File {file.filename} already exists but is invalid. Reprocessing...")
+                            print(f"File {file.filename} already exists but is \033[91m\033[1minvalid\033[0m. Reprocessing...")
                     else:
                         print(f"File {file.filename} already exists. Skipping...")
                         continue
@@ -303,7 +321,7 @@ if __name__ == "__main__":
                                             file_metadata["processed_chunks"] = list(processed_chunks)
                                             metadata[file.filename] = file_metadata
                                             write_metadata(metadata_path, metadata)
-                                            print(f"Extracted {file.filename} from chunk {chunkhex}")
+                                            _LOG.info(f"Extracted {file.filename} from chunk {chunkhex}")
                                     break
                                 except PermissionError as e:
                                     if attempt < retries - 1:
@@ -315,9 +333,9 @@ if __name__ == "__main__":
                                 if args.validate and file.flags != 64:
                                     expected_sha1 = hexlify(file.sha_content).decode()
                                     if validate_file(final_file_path, expected_sha1):
-                                        print(f"Validation successful for {file.filename}")
+                                        print(f"Validation \033[92m\033[1msuccessful\033[0m for {file.filename}")
                                     else:
-                                        print(f"Validation failed for {file.filename}")
+                                        print(f"Validation \033[91m\033[1mfailed\033[0m for {file.filename}")
                                         corrupted_file_path = final_file_path + ".corrupted"
                                         Path(final_file_path).rename(corrupted_file_path)
                                         print(f"Renamed {final_file_path} to {corrupted_file_path}")
