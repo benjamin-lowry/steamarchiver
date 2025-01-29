@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-from argparse import ArgumentParser
+from argparse import ArgumentParser, Action
 from asyncio import run, gather, sleep
 from base64 import b64decode
 from binascii import hexlify, unhexlify
@@ -12,13 +12,31 @@ import json
 
 _LOG = logging.getLogger("DepotArchiver")
 
+class AppDepotAction(Action):
+    def __call__(self, parser, namespace, values, option_string=None):
+        app_depot = getattr(namespace, 'app_depot', [])
+        app_depot.append({
+            'appid': values[0],
+            'depotid': values[1] if len(values) > 1 else None,
+            'manifestid': values[2] if len(values) > 2 else None,
+            'branch': None
+        })
+        setattr(namespace, 'app_depot', app_depot)
+
+class BranchAction(Action):
+    def __call__(self, parser, namespace, values, option_string=None):
+        app_depot = getattr(namespace, 'app_depot', [])
+        if app_depot:
+            app_depot[-1]['branch'] = values
+        setattr(namespace, 'app_depot', app_depot)
+
 if __name__ == "__main__": # exit before we import our shit if the args are wrong
     parser = ArgumentParser(description='Download Steam content depots for archival. Downloading apps: Specify an app to download all the depots for that app, or an app and depot ID to download the latest version of that depot (or a specific version if the manifest ID is specified.) Downloading workshop items: Use the -w flag to specify the ID of the workshop file to download. Exit code is 0 if all downloads succeeded, or the number of failures if at least one failed.')
     dl_group = parser.add_mutually_exclusive_group()
     log_group = parser.add_mutually_exclusive_group()
-    dl_group.add_argument("-a", type=int, dest="downloads", metavar=("appid","depotid"), action="append", nargs='+', help="App, depot, and manifest ID to download. If the manifest ID is omitted, the lastest manifest specified by the public branch will be downloaded.\nIf the depot ID is omitted, all depots specified by the public branch will be downloaded.")
+    dl_group.add_argument("-a", type=int, metavar=("appid","depotid"), action=AppDepotAction, nargs='+', help="App, depot, and manifest ID to download. If the manifest ID is omitted, the lastest manifest specified by the public branch will be downloaded.\nIf the depot ID is omitted, all depots specified by the public branch will be downloaded.")
     dl_group.add_argument("-w", type=int, nargs='?', help="Workshop file ID to download.", dest="workshop_id")
-    parser.add_argument("-r", type=str, nargs='?', help="Branch Name.", dest="branch")
+    parser.add_argument("-r", type=str, nargs='?', help="Branch Name.", dest="branch", action=BranchAction)
     parser.add_argument("-n", type=str, nargs='?', help="Branch Password", dest="bpassword")
     parser.add_argument("-b", help="Download into a Steam backup file instead of storing the chunks individually", dest="backup", action="store_true")
     parser.add_argument("-e", type=str, nargs='?', help="Specifies the encrypted Manifest ID to be decrypted by the branch password.", dest="encryptedbranch")
@@ -38,11 +56,11 @@ if __name__ == "__main__": # exit before we import our shit if the args are wron
         print("connection limit must be at least 1")
         parser.print_help()
         exit(1)
-    if not args.downloads and not args.workshop_id:
+    if not args.app_depot and not args.workshop_id:
         print("must specify at least one appid or workshop file id")
         parser.print_help()
         exit(1)
-    if args.downloads and args.workshop_id:
+    if args.app_depot and args.workshop_id:
         print("must specify only app or workshop item, not both")
         parser.print_help()
         exit(1)
@@ -430,10 +448,11 @@ if __name__ == "__main__":
 
     # Iterate over all the downloads we want
     exit_status = 0
-    for dl_tuple in args.downloads:
-        appid = dl_tuple[0]
-        depotid = (dl_tuple[1] if len(dl_tuple) > 1 else None)
-        manifestid = (dl_tuple[2] if len(dl_tuple) > 2 else None)
+    for entry in args.app_depot:
+        appid = entry['appid']
+        depotid = entry['depotid']
+        manifestid = entry['manifestid']
+        branch = entry['branch']
 
         # Fetch appinfo
         if args.local_appinfo:
@@ -488,8 +507,8 @@ if __name__ == "__main__":
             get_depotkeys(appid, depotid)
             if manifestid:
                 print("Archiving", appinfo['common']['name'], "depot", depotid, "manifest", manifestid)
-                exit_status += (0 if archive_manifest(try_load_manifest(appid, depotid, manifestid, args.branch), c, name, args.dry_run, args.server, args.backup) else 1)
-            elif args.branch and args.bpassword:
+                exit_status += (0 if archive_manifest(try_load_manifest(appid, depotid, manifestid, branch), c, name, args.dry_run, args.server, args.backup) else 1)
+            elif branch and args.bpassword:
                 try:
                     branch_key = beta_check_password(appid, args.bpassword, c)
                     if args.encryptedbranch != '':
