@@ -11,7 +11,7 @@ from glob import glob
 from hashlib import sha1
 from io import BytesIO
 from os import scandir, makedirs, remove
-from os.path import dirname, exists
+from os.path import dirname, exists, join
 from pathlib import Path
 from struct import unpack
 from sys import argv
@@ -80,8 +80,8 @@ def process_file(file, value, badfiles):
                 decrypted = chunk_data
         else:
             chunkhex = hexlify(unhexlify(file.replace("_decrypted", ""))).decode()
-            if exists(path + chunkhex):
-                with open(path + chunkhex, "rb") as chunkfile:
+            if exists(chunk_path + chunkhex):
+                with open(chunk_path + chunkhex, "rb") as chunkfile:
                     if args.depotkey:
                         try:
                             decrypted = symmetric_decrypt(chunkfile.read(), args.depotkey)
@@ -94,8 +94,8 @@ def process_file(file, value, badfiles):
                         print("\033[31mERROR: chunk %s is encrypted, but no depot key was specified\033[0m" % chunkhex)
                         badfiles.put(chunkhex)
                         return chunkhex, False
-            elif exists(path + chunkhex + "_decrypted"):
-                with open(path + chunkhex + "_decrypted", "rb") as chunkfile:
+            elif exists(chunk_path + chunkhex + "_decrypted"):
+                with open(chunk_path + chunkhex + "_decrypted", "rb") as chunkfile:
                     decrypted = chunkfile.read()
             else:
                 print("missing chunk " + chunkhex)
@@ -141,7 +141,8 @@ def process_file(file, value, badfiles):
 
 if __name__ == "__main__":
     path = "./depots/%s/" % args.depotid
-    keyfile = "./keys/%s.depotkey" % args.depotid
+    chunk_path = join(path, "chunk")
+    keyfile = "./%s/%s.depotkey" % path, args.depotid
     if args.depotkey:
         args.depotkey = bytes.fromhex(args.depotkey)
     elif exists(keyfile):
@@ -195,7 +196,7 @@ if __name__ == "__main__":
     #     for name in manifestChunks:
     #         chunks[name] = 0
     else:
-        chunkFiles = [data.name for data in scandir(path) if data.is_file()
+        chunkFiles = [data.name for data in scandir(chunk_path) if data.is_file()
         and not data.name.endswith(".zip")]
         for name in chunkFiles: chunks[name] = 0
 

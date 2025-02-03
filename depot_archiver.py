@@ -1,22 +1,42 @@
 #!/usr/bin/env python3
-from argparse import ArgumentParser
+from argparse import ArgumentParser, Action
 from asyncio import run, gather, sleep
+from base64 import b64decode
 from binascii import hexlify, unhexlify
-from datetime import datetime
+from datetime import datetime, timezone
 from math import ceil
 from os import makedirs, path, listdir, remove
 from sys import argv
 import logging
+import json
 
 _LOG = logging.getLogger("DepotArchiver")
+
+class AppDepotAction(Action):
+    def __call__(self, parser, namespace, values, option_string=None):
+        app_depot = getattr(namespace, 'app_depot', [])
+        app_depot.append({
+            'appid': values[0],
+            'depotid': values[1] if len(values) > 1 else None,
+            'manifestid': values[2] if len(values) > 2 else None,
+            'branch': None
+        })
+        setattr(namespace, 'app_depot', app_depot)
+
+class BranchAction(Action):
+    def __call__(self, parser, namespace, values, option_string=None):
+        app_depot = getattr(namespace, 'app_depot', [])
+        if app_depot:
+            app_depot[-1]['branch'] = values
+        setattr(namespace, 'app_depot', app_depot)
 
 if __name__ == "__main__": # exit before we import our shit if the args are wrong
     parser = ArgumentParser(description='Download Steam content depots for archival. Downloading apps: Specify an app to download all the depots for that app, or an app and depot ID to download the latest version of that depot (or a specific version if the manifest ID is specified.) Downloading workshop items: Use the -w flag to specify the ID of the workshop file to download. Exit code is 0 if all downloads succeeded, or the number of failures if at least one failed.')
     dl_group = parser.add_mutually_exclusive_group()
     log_group = parser.add_mutually_exclusive_group()
-    dl_group.add_argument("-a", type=int, dest="downloads", metavar=("appid","depotid"), action="append", nargs='+', help="App, depot, and manifest ID to download. If the manifest ID is omitted, the lastest manifest specified by the public branch will be downloaded.\nIf the depot ID is omitted, all depots specified by the public branch will be downloaded.")
+    dl_group.add_argument("-a", type=int, metavar=("appid","depotid"), action=AppDepotAction, nargs='+', help="App, depot, and manifest ID to download. If the manifest ID is omitted, the lastest manifest specified by the public branch will be downloaded.\nIf the depot ID is omitted, all depots specified by the public branch will be downloaded.")
     dl_group.add_argument("-w", type=int, nargs='?', help="Workshop file ID to download.", dest="workshop_id")
-    parser.add_argument("-r", type=str, nargs='?', help="Branch Name.", dest="branch")
+    parser.add_argument("-r", type=str, nargs='?', help="Branch Name.", dest="branch", action=BranchAction)
     parser.add_argument("-n", type=str, nargs='?', help="Branch Password", dest="bpassword")
     parser.add_argument("-b", help="Download into a Steam backup file instead of storing the chunks individually", dest="backup", action="store_true")
     parser.add_argument("-e", type=str, nargs='?', help="Specifies the encrypted Manifest ID to be decrypted by the branch password.", dest="encryptedbranch")
@@ -28,6 +48,7 @@ if __name__ == "__main__": # exit before we import our shit if the args are wron
     parser.add_argument("-i", help="Log into a Steam account interactively.", dest="interactive", action="store_true")
     parser.add_argument("-u", type=str, help="Username for non-interactive login", dest="username", nargs="?")
     parser.add_argument("-p", type=str, help="Password for non-interactive login", dest="password", nargs="?")
+    parser.add_argument("--debug-manifest", help="Save manifest data as JSON for debugging", action="store_true")
     log_group.add_argument("--debug", help="Enable debug logging", action="store_true")
     log_group.add_argument("--info", help="Enable info logging", action="store_true")
     args = parser.parse_args()
@@ -35,11 +56,11 @@ if __name__ == "__main__": # exit before we import our shit if the args are wron
         print("connection limit must be at least 1")
         parser.print_help()
         exit(1)
-    if not args.downloads and not args.workshop_id:
+    if not args.app_depot and not args.workshop_id:
         print("must specify at least one appid or workshop file id")
         parser.print_help()
         exit(1)
-    if args.downloads and args.workshop_id:
+    if args.app_depot and args.workshop_id:
         print("must specify only app or workshop item, not both")
         parser.print_help()
         exit(1)
@@ -59,7 +80,7 @@ if __name__ == "__main__": # exit before we import our shit if the args are wron
 from steam.client import SteamClient
 from steam.client.cdn import CDNClient, CDNDepotManifest
 from steam.core.msg import MsgProto
-from steam.core.crypto import symmetric_decrypt_ecb
+from steam.core.crypto import symmetric_decrypt_ecb, symmetric_decrypt
 from steam.enums import EResult
 from steam.enums.emsg import EMsg
 from steam.exceptions import SteamError
@@ -69,15 +90,67 @@ from aiohttp import ClientSession
 from login import auto_login
 from chunkstore import Chunkstore
 
+def save_manifest_to_json(manifest, output_dir):
+    debug_dir = path.join(output_dir, "debug")
+    makedirs(debug_dir, exist_ok=True)
+    manifest_path = path.join(debug_dir, f"{manifest.depot_id}_{manifest.gid}.json")
+    
+    # Load the depot key
+    keyfile = f"./depots/{manifest.depot_id}/{manifest.depot_id}.depotkey"
+    if not path.exists(keyfile):
+        print(f"Depot key file not found: {keyfile}")
+        return
+    with open(keyfile, "rb") as f:
+        decryption_key = f.read()
+    
+    # Convert the manifest payload to a dictionary
+    payload_dict = {
+        "depot_id": manifest.depot_id,
+        "gid": manifest.gid,
+        "creation_time": datetime.fromtimestamp(manifest.metadata.creation_time, tz=timezone.utc).strftime('%Y-%m-%dT%H:%M:%S'),
+        "filenames_encrypted": manifest.filenames_encrypted,
+        "mappings": []
+    }
+    
+    for file in manifest.payload.mappings:
+        decrypted_filename = symmetric_decrypt(b64decode(file.filename), decryption_key).decode('utf-8').rstrip('\x00')
+        file_dict = {
+            "Encrypted Name": file.filename,
+            "Decrypted Name": decrypted_filename,
+            "size": file.size,
+            "flags": file.flags,
+            "sha_filename": hexlify(file.sha_filename).decode(),
+            "sha_content": hexlify(file.sha_content).decode(),
+            "chunks": []
+        }
+        for chunk in file.chunks:
+            chunk_dict = {
+                "sha": hexlify(chunk.sha).decode(),
+                "crc": chunk.crc,
+                "offset": chunk.offset,
+                "cb_original": chunk.cb_original,
+                "cb_compressed": chunk.cb_compressed
+            }
+            file_dict["chunks"].append(chunk_dict)
+        payload_dict["mappings"].append(file_dict)
+    
+    # Write the dictionary to a JSON file
+    with open(manifest_path, "w") as f:
+        json.dump(payload_dict, f, indent=4)
+    
+    print(f"Manifest saved to {manifest_path}")
+
 def archive_manifest(manifest, c, name="unknown", dry_run=False, server_override=None, backup=False):
     if not manifest:
         return False
     print("Archiving", manifest.depot_id, "(%s)" % (name), "gid", manifest.gid, "from", datetime.fromtimestamp(manifest.creation_time))
-    dest = "./depots/" + str(manifest.depot_id) + "/"
-    makedirs(dest, exist_ok=True)
+    if args.debug_manifest:
+        save_manifest_to_json(manifest, "./depots/" + str(manifest.depot_id))
     if dry_run:
         print("Not downloading chunks (dry run)")
         return True
+    dest = "./depots/" + str(manifest.depot_id) + "/chunk/"
+    makedirs(dest, exist_ok=True)
     if backup:
         chunkstore = Chunkstore(str(manifest.depot_id) + "_depotcache_1.csm", depot=manifest.depot_id, is_encrypted=True)
         if path.exists(chunkstore.csdname): chunkstore.unpack()
@@ -122,6 +195,7 @@ def archive_manifest(manifest, c, name="unknown", dry_run=False, server_override
                                 manifest.depot_id,
                                 chunk_str)
                             host = ("https" if server.https else "http") + "://" + server.host
+                        _LOG.info(f"Downloading from {request_url}")
                         async with session.get(request_url) as response:
                             if response.ok:
                                 download_state.bytes += response.content_length
@@ -187,8 +261,8 @@ def archive_manifest(manifest, c, name="unknown", dry_run=False, server_override
 
 def try_load_manifest(appid, depotid, manifestid, branch='public', password=None):
     print(f"Getting a manifest for app {appid} depot {depotid} gid {manifestid}")
-    dest = "./depots/%s/%s.zip" % (depotid, manifestid)
-    makedirs("./depots/%s" % depotid, exist_ok=True)
+    dest = "./depots/%s/manifest/%s.manif5" % (depotid, manifestid)
+    makedirs("./depots/%s/manifest" % depotid, exist_ok=True)
     if path.exists(dest):
         with open(dest, "rb") as f:
             print("Loaded cached manifest %s from disk" % manifestid)
@@ -201,6 +275,10 @@ def try_load_manifest(appid, depotid, manifestid, branch='public', password=None
                 depotid = int(depotid)
                 request_code = c.get_manifest_request_code(appid, depotid, manifestid, branch, password)
                 print("Obtained code", request_code, "for depot", depotid, "valid as of", datetime.now())
+                ## Unable to get full URL due to how the manifest is grabbed. Log will show the URL string
+                #  After the steam CDN URL. If you know the CDN Server name, you can prepend it to
+                #  a wget/curl call for the manifest, for checking manifest files.
+                _LOG.info(f"Downloading from depot/{depotid}/manifest/{manifestid}/5/{request_code}")
                 resp = c.cdn_cmd('depot', '%s/manifest/%s/5/%s' % (depotid, manifestid, request_code), appid, depotid)
                 if not resp.ok:
                     print("Got status code", resp.status_code, resp.reason, "trying to download depot", depotid, "manifest", manifestid)
@@ -268,9 +346,9 @@ def beta_check_password(app_id, password, c):
 
 def get_depotkeys(app, depot):
     # key_text = False
-    makedirs("./keys", exist_ok=True)
+    makedirs("./depots/%s" % depot, exist_ok=True)
     key_binary = False
-    keyfile = "./keys/%s.depotkey" % depot
+    keyfile = "./depots/%s/%s.depotkey" % (depot, depot)
     # keys_saved = []
     # key = 0
     # Checking if either depot key within depot_key.txt or the depot's binary key file exists
@@ -370,10 +448,11 @@ if __name__ == "__main__":
 
     # Iterate over all the downloads we want
     exit_status = 0
-    for dl_tuple in args.downloads:
-        appid = dl_tuple[0]
-        depotid = (dl_tuple[1] if len(dl_tuple) > 1 else None)
-        manifestid = (dl_tuple[2] if len(dl_tuple) > 2 else None)
+    for entry in args.app_depot:
+        appid = entry['appid']
+        depotid = entry['depotid']
+        manifestid = entry['manifestid']
+        branch = entry['branch']
 
         # Fetch appinfo
         if args.local_appinfo:
@@ -428,8 +507,8 @@ if __name__ == "__main__":
             get_depotkeys(appid, depotid)
             if manifestid:
                 print("Archiving", appinfo['common']['name'], "depot", depotid, "manifest", manifestid)
-                exit_status += (0 if archive_manifest(try_load_manifest(appid, depotid, manifestid, args.branch), c, name, args.dry_run, args.server, args.backup) else 1)
-            elif args.branch and args.bpassword:
+                exit_status += (0 if archive_manifest(try_load_manifest(appid, depotid, manifestid, branch), c, name, args.dry_run, args.server, args.backup) else 1)
+            elif branch and args.bpassword:
                 try:
                     branch_key = beta_check_password(appid, args.bpassword, c)
                     if args.encryptedbranch != '':
