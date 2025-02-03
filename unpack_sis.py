@@ -9,6 +9,7 @@ from struct import iter_unpack, pack
 from sys import argv
 from vdf import loads
 from chunkstore import Chunkstore
+from migration import migration_needed, migrate
 
 def unpack_chunkstore(target_base, key=None, key_hex=None):
     file_index = 1
@@ -25,24 +26,24 @@ def unpack_chunkstore(target_base, key=None, key_hex=None):
                 # print("extracting chunk %s from offset %s in file %s" % (hexlify(sha).decode(), offset, csd_target))
                 csdfile.seek(offset)
                 if key:
-                    if not path.exists("./depots/%s/%s" % (chunkstore.depot, hexlify(sha).decode())):
+                    if not path.exists("./depot/%s/chunk/%s" % (chunkstore.depot, hexlify(sha).decode())):
                         print("extracting chunk %s from offset %s in file %s" % (hexlify(sha).decode(), offset, csd_target))
-                        with open("./depots/%s/%s" % (chunkstore.depot, hexlify(sha).decode()), "wb") as f:
+                        with open("./depot/%s/chunk/%s" % (chunkstore.depot, hexlify(sha).decode()), "wb") as f:
                             print("writing %s bytes re-encrypted using key %s and random IV" % (length, key_hex))
                             f.write(symmetric_encrypt(csdfile.read(length), key))
                 elif chunkstore.is_encrypted:
-                    if not path.exists("./depots/%s/%s" % (chunkstore.depot, hexlify(sha).decode())):
+                    if not path.exists("./depot/%s/chunk/%s" % (chunkstore.depot, hexlify(sha).decode())):
                         print("extracting chunk %s from offset %s in file %s" % (hexlify(sha).decode(), offset, csd_target))
-                        with open("./depots/%s/%s" % (chunkstore.depot, hexlify(sha).decode()), "wb") as f:
+                        with open("./depot/%s/chunk/%s" % (chunkstore.depot, hexlify(sha).decode()), "wb") as f:
                             print("writing %s bytes encrypted" % length)
                             f.write(csdfile.read(length))
                 else:
-                    if not path.exists("./depots/%s/%s_decrypted" % (chunkstore.depot, hexlify(sha).decode())):
+                    if not path.exists("./depot/%s/chunk/%s_decrypted" % (chunkstore.depot, hexlify(sha).decode())):
                         print("extracting chunk %s from offset %s in file %s" % (hexlify(sha).decode(), offset, csd_target))
-                        with open("./depots/%s/%s_decrypted" % (chunkstore.depot, hexlify(sha).decode()), "wb") as f:
+                        with open("./depot/%s/chunk/%s_decrypted" % (chunkstore.depot, hexlify(sha).decode()), "wb") as f:
                             print("writing %s bytes unencrypted" % length)
                             f.write(csdfile.read(length))
-            makedirs("./depots/%s" % chunkstore.depot, exist_ok=True)
+            makedirs("./depot/%s/chunk" % chunkstore.depot, exist_ok=True)
             chunkstore.unpack(unpacker)
         
         file_index += 1
@@ -50,8 +51,8 @@ def unpack_chunkstore(target_base, key=None, key_hex=None):
         csm_target = target_base + str(file_index) + ".csm"
 
 def find_key(depot):
-    if path.exists(f"./keys/{depot}.depotkey"):
-        with open(f"./keys/{depot}.depotkey", "rb") as f:
+    if path.exists(f"./depot/{depot}/{depot}.depotkey"):
+        with open(f"./depot/{depot}/{depot}.depotkey", "rb") as f:
             return unhexlify(f.read()), f.read()
     elif path.exists("./depot_keys.txt"):
         with open("./depot_keys.txt", "r", encoding="utf-8") as f:
@@ -86,6 +87,7 @@ def unpack_sis(sku, chunkstore_path, use_key = False):
     return True
 
 if __name__ == "__main__":
+    if migration_needed(): migrate()
     parser = ArgumentParser(description='Unpacks game data chunks from a SteamPipe retail master or game backup.')
     parser.add_argument("target", type=str, nargs='+', help="Path to the sku.sis file defining the master to unpack, or paths to csd or csm files if unpacking multiple chunkstores.")
     parser.add_argument("-e", action='store_true', help="Re-encrypt the chunks with a key from depot_keys.txt (if one is available) after extracting. (The primary reason you would want to do this is to serve the chunks to a Steam client over a LAN cache.)", dest="key")

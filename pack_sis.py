@@ -8,10 +8,11 @@ from vdf import dumps
 from sys import stderr
 from chunkstore import Chunkstore
 from steam.core.manifest import DepotManifest
+from migration import migration_needed, migrate
 
 def pack_backup(depot, destdir, decrypted=False, no_update=False, split=False, manifest_chunks=None, only_manifest=False):
     target_base = destdir + "/" + str(depot) + "_depotcache_"
-    depot_dir = "./depots/" + str(depot)
+    depot_dir = "./depot/" + str(depot)
     max_file_size = 1 * 1024 * 1024 * 1024  # 1 GiB
     file_index = 1
     csd_target = target_base + str(file_index) + ".csd"
@@ -57,8 +58,8 @@ def pack_backup(depot, destdir, decrypted=False, no_update=False, split=False, m
         chunks.update(manifest_chunks)
 
     if not only_manifest:
-        cdn_chunks = [chunk.name for chunk in scandir(depot_dir) if chunk.is_file()
-                      and not chunk.name.endswith(".zip")
+        cdn_chunks = [chunk.name for chunk in scandir(depot_dir + "/chunk/") if chunk.is_file()
+                      and not chunk.name.endswith(".manif5")
                       and chunk_match(chunk.name)
                       and is_hex(chunk.name.replace("_decrypted", ""))
                       and not unhexlify(chunk.name.replace("_decrypted", "")) in chunkstore.chunks.keys()]
@@ -73,7 +74,7 @@ def pack_backup(depot, destdir, decrypted=False, no_update=False, split=False, m
         csd.seek(0, 2)
         offset = csd.tell()
 
-        with open("./depots/" + str(depot) + "/" + chunk, "rb") as chunkfile:
+        with open("./depot/" + str(depot) + "/chunk/" + chunk, "rb") as chunkfile:
             chunkfile.seek(0, 2)
             length = chunkfile.tell()
             chunkfile.seek(0)
@@ -105,6 +106,7 @@ def pack_backup(depot, destdir, decrypted=False, no_update=False, split=False, m
     return sizes
 
 if __name__ == "__main__":
+    if migration_needed(): migrate()
     parser = ArgumentParser(description='Pack a SteamPipe backup (.csd/.csm files, and optionally an sku.sis file defining the backup) from individual chunks in the depots/ folder.')
     parser.add_argument("-a", dest="appid", type=int, help="App ID for sku file (if ommitted, no sku will be generated)", nargs="?")
     parser.add_argument("-d", dest="depots", metavar=('depot', 'manifest'), action="append", type=int, help="Depot ID to pack, can be used multiple times. Include a manifest ID too if generating an sku.sis", nargs='+')

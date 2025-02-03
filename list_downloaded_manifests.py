@@ -19,6 +19,7 @@ if __name__ == "__main__": # exit before we import our shit if the args are wron
     args = parser.parse_args()
 
 from steam.core.manifest import DepotManifest
+from migration import migration_needed, migrate
 
 def print_app_info(appid, duplicate_appinfo=False, search_chunks=True):
     changenumbers = []
@@ -127,7 +128,7 @@ def print_branches(appinfo, search_chunks=True):
         for index, depot in enumerate(depots):
             if not depot in depot_files.keys():
                 try:
-                    depot_files[depot] = listdir("./depots/%s/" % depot)
+                    depot_files[depot] = listdir("./depot/%s/" % depot)
                 except FileNotFoundError:
                     print("\t\t[Missing depot " + str(depot) + ("(%s).]" % (depot_names[depot]) if depot_names[depot] else ".]"))
                     continue
@@ -149,7 +150,7 @@ def print_branches(appinfo, search_chunks=True):
         print("\t%s/%s depots for %s are up-to-date with the public branch" % (depots_downloaded["public"], len(depots), appinfo['appinfo']['common']['name']))
 
 def print_depot_info(depotid, depot_files, manifests=None, print_not_exists=True, name=None, search_chunks=True):
-    path = "./depots/%s/" % depotid
+    path = "./depot/%s/manifest" % depotid
     if not exists(path):
         if name:
             print("\t\tDepot %s (%s) not found" % (depotid, name), end="")
@@ -172,8 +173,10 @@ def print_depot_info(depotid, depot_files, manifests=None, print_not_exists=True
         try:
             results = []
             for file in listdir(path):
-                if file.endswith(".zip"):
-                    results.append(print_manifest_info(depotid, int(file.replace(".zip", "")), depot_files, print_not_exists, name, search_chunks))
+                if file.endswith(".manif5"):
+                    try:
+                        results.append(print_manifest_info(depotid, int(file.replace(".manif5", "")), depot_files, print_not_exists, name, search_chunks))
+                    except ValueError: pass
             if all(x for x in results):
                 return True
             else:
@@ -187,7 +190,7 @@ def print_depot_info(depotid, depot_files, manifests=None, print_not_exists=True
 
 def print_manifest_info(depotid, manifestid, depot_files, print_not_exists=True, name=None, search_chunks=True):
     manifests = []
-    manifest_zip = "./depots/%s/%s.zip" % (depotid, manifestid)
+    manifest_zip = "./depot/%s/manifest/%s.manif5" % (depotid, manifestid)
     chunks_on_disk = 0
     if not exists(manifest_zip):
         if print_not_exists:
@@ -217,6 +220,7 @@ def print_manifest_info(depotid, manifestid, depot_files, print_not_exists=True,
     return True
 
 if __name__ == "__main__":
+    if migration_needed(): migrate()
     if args.all_apps:
         print_all_app_info(args.duplicate_appinfo, args.search_chunks)
     elif args.appid:
@@ -228,7 +232,8 @@ if __name__ == "__main__":
             print_app_info(app, args.duplicate_appinfo, args.search_chunks)
     elif args.depotid:
         for depot in args.depotid:
-            print_depot_info(depot, listdir("./depots/%s/" % depot), args.manifestid, search_chunks=args.search_chunks)
+            print_depot_info(depot, listdir("./depot/%s/chunk/" % depot) if exists("./depot/%s/chunk" % depot) else {}, args.manifestid, search_chunks=args.search_chunks)
     else:
-        for depot in sorted([int(x) for x in listdir("./depots/")]):
-            print_depot_info(depot, listdir("./depots/%s/" % depot), args.manifestid, print_not_exists=False, search_chunks=args.search_chunks)
+        for depot in sorted([(int(x) if x != ".DS_Store" else 0) for x in listdir("./depot/")]):
+            if depot != 0:
+                print_depot_info(depot, listdir("./depot/%s/chunk/" % depot) if exists("./depot/%s/chunk" % depot) else {}, args.manifestid, print_not_exists=False, search_chunks=args.search_chunks)
