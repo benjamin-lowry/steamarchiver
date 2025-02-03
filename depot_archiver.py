@@ -89,6 +89,7 @@ from vdf import loads
 from aiohttp import ClientSession
 from login import auto_login
 from chunkstore import Chunkstore
+from migration import migration_needed, migrate
 
 def save_manifest_to_json(manifest, output_dir):
     debug_dir = path.join(output_dir, "debug")
@@ -96,7 +97,7 @@ def save_manifest_to_json(manifest, output_dir):
     manifest_path = path.join(debug_dir, f"{manifest.depot_id}_{manifest.gid}.json")
     
     # Load the depot key
-    keyfile = f"./depots/{manifest.depot_id}/{manifest.depot_id}.depotkey"
+    keyfile = f"./depot/{manifest.depot_id}/{manifest.depot_id}.depotkey"
     if not path.exists(keyfile):
         print(f"Depot key file not found: {keyfile}")
         return
@@ -145,11 +146,11 @@ def archive_manifest(manifest, c, name="unknown", dry_run=False, server_override
         return False
     print("Archiving", manifest.depot_id, "(%s)" % (name), "gid", manifest.gid, "from", datetime.fromtimestamp(manifest.creation_time))
     if args.debug_manifest:
-        save_manifest_to_json(manifest, "./depots/" + str(manifest.depot_id))
+        save_manifest_to_json(manifest, "./depot/" + str(manifest.depot_id))
     if dry_run:
         print("Not downloading chunks (dry run)")
         return True
-    dest = "./depots/" + str(manifest.depot_id) + "/chunk/"
+    dest = "./depot/" + str(manifest.depot_id) + "/chunk/"
     makedirs(dest, exist_ok=True)
     if backup:
         chunkstore = Chunkstore(str(manifest.depot_id) + "_depotcache_1.csm", depot=manifest.depot_id, is_encrypted=True)
@@ -261,8 +262,8 @@ def archive_manifest(manifest, c, name="unknown", dry_run=False, server_override
 
 def try_load_manifest(appid, depotid, manifestid, branch='public', password=None):
     print(f"Getting a manifest for app {appid} depot {depotid} gid {manifestid}")
-    dest = "./depots/%s/manifest/%s.manif5" % (depotid, manifestid)
-    makedirs("./depots/%s/manifest" % depotid, exist_ok=True)
+    dest = "./depot/%s/manifest/%s.manif5" % (depotid, manifestid)
+    makedirs("./depot/%s/manifest" % depotid, exist_ok=True)
     if path.exists(dest):
         with open(dest, "rb") as f:
             print("Loaded cached manifest %s from disk" % manifestid)
@@ -346,9 +347,9 @@ def beta_check_password(app_id, password, c):
 
 def get_depotkeys(app, depot):
     # key_text = False
-    makedirs("./depots/%s" % depot, exist_ok=True)
+    makedirs("./depot/%s" % depot, exist_ok=True)
     key_binary = False
-    keyfile = "./depots/%s/%s.depotkey" % (depot, depot)
+    keyfile = "./depot/%s/%s.depotkey" % (depot, depot)
     # keys_saved = []
     # key = 0
     # Checking if either depot key within depot_key.txt or the depot's binary key file exists
@@ -411,9 +412,10 @@ def get_depotkeys(app, depot):
     #     return
 
 if __name__ == "__main__":
+    if migration_needed(): migrate()
     # Create directories
     makedirs("./appinfo", exist_ok=True)
-    makedirs("./depots", exist_ok=True)
+    makedirs("./depot", exist_ok=True)
 
     steam_client = SteamClient()
     print("Connecting to the Steam network...")

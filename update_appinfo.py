@@ -23,7 +23,6 @@ from login import auto_login
 if __name__ == "__main__":
     # Create directories
     makedirs("./appinfo", exist_ok=True)
-    makedirs("./depots", exist_ok=True)
 
     steam_client = SteamClient()
     print("Connecting to the Steam network...")

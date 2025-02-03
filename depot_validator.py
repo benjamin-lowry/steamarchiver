@@ -18,6 +18,7 @@ from sys import argv
 from zipfile import BadZipFile, ZipFile
 import lzma
 import csv
+from migration import migration_needed, migrate
 
 if __name__ == "__main__": # exit before we import our shit if the args are wrong
     parser = ArgumentParser(description='Verifies downloaded depots.')
@@ -140,7 +141,8 @@ def process_file(file, value, badfiles):
         return file, False
 
 if __name__ == "__main__":
-    path = "./depots/%s/" % args.depotid
+    if migration_needed(): migrate()
+    path = "./depot/%s/" % args.depotid
     chunk_path = join(path, "chunk")
     keyfile = "./%s/%s.depotkey" % path, args.depotid
     if args.depotkey:

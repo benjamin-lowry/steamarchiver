@@ -5,8 +5,10 @@ from datetime import datetime, timezone
 from os.path import exists
 from steam.core.manifest import DepotManifest
 from sys import stderr
+from migration import migration_needed, migrate
 
 if __name__ == "__main__":
+    if migration_needed(): migrate()
     parser = ArgumentParser(description='Generates a diff (comparison of changes) of two versions (manifests) of a Steam depot.')
     parser.add_argument("depotid", type=int, help="Depot ID to diff.")
     parser.add_argument("old", type=int, help="Old manifest to compare.")
@@ -15,8 +17,8 @@ if __name__ == "__main__":
     parser.add_argument("-d", action="store_true", help="detailed: print the sha1 checksums of added/removed chunks", dest="detailed")
     args = parser.parse_args()
     keyfile = "./keys/%s.depotkey" % args.depotid
-    oldpath = f"./depots/{args.depotid}/{args.old}.zip"
-    newpath = f"./depots/{args.depotid}/{args.new}.zip"
+    oldpath = f"./depot/{args.depotid}/manifest/{args.old}.manif5"
+    newpath = f"./depot/{args.depotid}/manifest/{args.new}.manif5"
     if not exists(oldpath):
         print(f"manifest {args.old} not found", file=stderr)
         exit(1)

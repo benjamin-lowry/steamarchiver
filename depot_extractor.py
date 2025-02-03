@@ -63,12 +63,14 @@ if __name__ == "__main__": # exit before we import our shit if the args are wron
 from steam.core.manifest import DepotManifest
 from steam.core.crypto import symmetric_decrypt
 from chunkstore import Chunkstore
+from migration import migration_needed, migrate
 
 if __name__ == "__main__":
-    path = "./depots/%s" % args.depotid
+    if migration_needed(): migrate()
+    path = "./depot/%s" % args.depotid
     manifest_path = join(path, "manifest")
     chunk_path = join(path, "chunk/")
-    keyfile = "./depots/%s/%s.depotkey" % (args.depotid, args.depotid)
+    keyfile = "./depot/%s/%s.depotkey" % (args.depotid, args.depotid)
     manifest = None
     badfiles = []
     with open(join(manifest_path, "%s.manif5" % (args.manifestid)), "rb") as f:
