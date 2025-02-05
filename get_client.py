@@ -34,6 +34,8 @@ def download_packages(client_manifest, platform, download_zip=True, download_vz=
     makedirs("./clientpackages", exist_ok=True)
     print("Downloading packages for client version %s" % client_manifest[platform]['version'])
     del client_manifest[platform]['version']
+    if 'ostype' in client_manifest[platform]:
+        del client_manifest[platform]['ostype']
     packages = {}
     for package_name, package in client_manifest[platform].items():
         packages[package_name] = package
