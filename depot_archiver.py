@@ -34,6 +34,7 @@ if __name__ == "__main__": # exit before we import our shit if the args are wron
     parser = ArgumentParser(description='Download Steam content depots for archival. Downloading apps: Specify an app to download all the depots for that app, or an app and depot ID to download the latest version of that depot (or a specific version if the manifest ID is specified.) Downloading workshop items: Use the -w flag to specify the ID of the workshop file to download. Exit code is 0 if all downloads succeeded, or the number of failures if at least one failed.')
     dl_group = parser.add_mutually_exclusive_group()
     log_group = parser.add_mutually_exclusive_group()
+    server_group = parser.add_mutually_exclusive_group()
     dl_group.add_argument("-a", type=int, metavar=("appid","depotid"), action=AppDepotAction, nargs='+', help="App, depot, and manifest ID to download. If the manifest ID is omitted, the lastest manifest specified by the public branch will be downloaded.\nIf the depot ID is omitted, all depots specified by the public branch will be downloaded.")
     dl_group.add_argument("-w", type=int, nargs='?', help="Workshop file ID to download.", dest="workshop_id")
     parser.add_argument("-r", type=str, nargs='?', help="Branch Name.", dest="branch", action=BranchAction)
@@ -44,7 +45,8 @@ if __name__ == "__main__": # exit before we import our shit if the args are wron
     parser.add_argument("-d", help="Dry run: download manifest (file metadata) without actually downloading files", dest="dry_run", action="store_true")
     parser.add_argument("-l", help="Use latest local appinfo instead of trying to download", dest="local_appinfo", action="store_true")
     parser.add_argument("-c", type=int, help="Number of concurrent downloads to perform at once, default 10", dest="connection_limit", default=10)
-    parser.add_argument("-s", type=str, help="Specify a specific server URL instead of automatically selecting one, e.g. https://steampipe.akamaized.net", nargs='?', dest="server")
+    server_group.add_argument("-s", type=str, help="Specify a specific server URL instead of automatically selecting one, e.g. https://steampipe.akamaized.net", nargs='?', dest="server")
+    server_group.add_argument("--use-lancache", help="Enable LanCache detection", action="store_true")
     parser.add_argument("-i", help="Log into a Steam account interactively.", dest="interactive", action="store_true")
     parser.add_argument("-u", type=str, help="Username for non-interactive login", dest="username", nargs="?")
     parser.add_argument("-p", type=str, help="Password for non-interactive login", dest="password", nargs="?")
@@ -68,10 +70,16 @@ if __name__ == "__main__": # exit before we import our shit if the args are wron
         print("The Workshop doesn't have branches. Unable to continue")
         parser.print_help()
         exit(1)
+    if args.server and args.use_lancache:
+        print("Cannot specify both a server and use LanCache")
+        parser.print_help()
+        exit(1)
     if args.debug:
-        logging.basicConfig(level=logging.DEBUG)
+        _LOG.setLevel(logging.DEBUG)
+        # logging.basicConfig(level=logging.DEBUG)
     elif args.info:
-        logging.basicConfig(level=logging.INFO)
+        _LOG.setLevel(logging.INFO)
+        # logging.basicConfig(level=logging.INFO)
     # if args.branch and not args.bpassword:
     #     print("You need a password in order to download from a non-Public Branch")
     #     parser.print_help()
@@ -411,6 +419,26 @@ def get_depotkeys(app, depot):
     #             print("%s\t\t%s" % (depot, key_hex))
     #     return
 
+def detect_lancache():
+    import socket
+    lancache_domain = "lancache.steamcontent.com"
+    try:
+        ip = socket.gethostbyname(lancache_domain)
+        if is_local_ip(ip):
+            print(f"LanCache detected at {lancache_domain} ({ip})")
+            return ip
+        else:
+            print(f"Detected IP {ip} is not a local IP address")
+    except socket.gaierror:
+        print("No LanCache detected")
+    return None
+
+def is_local_ip(ip):
+    local_subnets = [
+        "10.", "172.16.", "192.168."
+    ]
+    return any(ip.startswith(subnet) for subnet in local_subnets)
+
 if __name__ == "__main__":
     if migration_needed(): migrate()
     # Create directories
@@ -427,6 +455,16 @@ if __name__ == "__main__":
         auto_login(steam_client, args.username, args.password)
     else:
         auto_login(steam_client)
+    
+    if args.use_lancache:
+        lancache_ip = detect_lancache()
+        if lancache_ip:
+            server_override = f"http://{lancache_ip}"
+        else:
+            server_override = None
+    else:
+        server_override = None
+    
     c = CDNClient(steam_client)
 
     if args.workshop_id:
@@ -470,7 +508,7 @@ if __name__ == "__main__":
                 exit(1)
             appinfo_path = "./appinfo/%s_%s.vdf" % (appid, highest_changenumber)
         else:
-            print(f"Is the client logged in? {steam_client.logged_on}")
+            _LOG.debug(f"Is the client logged in? {steam_client.logged_on}")
             print("Fetching appinfo for", appid)
             tokens = steam_client.get_access_tokens(app_ids=[appid])
             msg = MsgProto(EMsg.ClientPICSProductInfoRequest)

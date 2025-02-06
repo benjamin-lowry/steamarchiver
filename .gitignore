@@ -2,6 +2,7 @@ __pycache__
 appinfo/
 auth/
 depots/
+depot/
 venv/
 virtualenv/
 extract/

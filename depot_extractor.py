@@ -169,14 +169,14 @@ if __name__ == "__main__":
             if decrypted[:2] == b'VZ':  # LZMA
                 if args.dry_run:
                     print("Testing", file.filename, "(LZMA) from chunk", chunkhex)
-                # else:
-                #     print("Extracting", file.filename, "(LZMA) from chunk", chunkhex)
+                else:
+                    print("Extracting", file.filename, "(LZMA) from chunk", chunkhex)
                 decompressed = lzma.LZMADecompressor(lzma.FORMAT_RAW, filters=[lzma._decode_filter_properties(lzma.FILTER_LZMA1, decrypted[7:12])]).decompress(decrypted[12:-9])[:chunk.cb_original]
             elif decrypted[:2] == b'PK':  # Zip
                 if args.dry_run:
                     print("Testing", file.filename, "(Zip) from chunk", chunkhex)
-                # else:
-                #     print("Extracting", file.filename, "(Zip) from chunk", chunkhex)
+                else:
+                    print("Extracting", file.filename, "(Zip) from chunk", chunkhex)
                 zipfile = ZipFile(BytesIO(decrypted))
                 decompressed = zipfile.read(zipfile.filelist[0])
             else:
